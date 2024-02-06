@@ -31,13 +31,16 @@
 /** D E F I N E S ****************************************************************************************************/
 // GPIO
 #define GPIO_IN_BUTTON              (14)
+#define GPIO_OUT_BUZZER             (16)
 
 // Board modes
-#define BOARD_MODE_SERVER           (0)
-#define BOARD_MODE_CLIENT           (1)
+#define BOARD_MODE_UNKNOWN          (0)
+#define BOARD_MODE_SERVER           (1)
+#define BOARD_MODE_CLIENT           (2)
 
-// Network
-#define TIMER_REFRESH_WIFI_DATA_MS  (10000)
+// Timers
+#define TIMER_REFRESH_WIFI_DATA_MS  (200)
+#define TIMER_IDENTIFY_BOARD_MS     (2000)
 
 
 /** S T R U C T S ****************************************************************************************************/
@@ -52,7 +55,7 @@ struct strComData
 
 /** D E C L A R A T I O N S ******************************************************************************************/
 // Board
-uint8_t boardMode;
+uint8_t boardMode = BOARD_MODE_UNKNOWN;
 
 // Devices
 Inclinometer inclinometer = Inclinometer();
@@ -61,94 +64,117 @@ WifiManager wifiMgr       = WifiManager();
 
 // UI
 DrawerManager drawerMgr   = DrawerManager();
-SoundManager soundMgr     = SoundManager();
+SoundManager soundMgr     = SoundManager(GPIO_OUT_BUZZER);
 AlarmManager alarmMgr     = AlarmManager();
 
 // Timer
-unsigned long timerToSendWifiData_ms = millis();
+unsigned long timerToIdentifyBoard_ms = millis();
+
+// Memory
+struct strAngular incAngularMemory;
 
 
 /** M A I N  F U N C T I O N S ***************************************************************************************/
 void setup (void)
 {
-  //------------------------------------------------------------------------------------
-  // TO SET BEFORE TO COMPILE THE SOFWARE : BOARD_MODE_SERVER | BOARD_MODE_CLIENT
-  //------------------------------------------------------------------------------------
-  boardMode = BOARD_MODE_SERVER;
-
   // Debug connection
   Serial.begin(115200);
-  Serial.println("\n\n\n----------------------------------------------------------------------");
-  Serial.print("BOARD MODE (");
-  Serial.print(BOARD_MODE_SERVER);
-  Serial.print("=BOARD_MODE_SERVER | ");
-  Serial.print(BOARD_MODE_CLIENT);
-  Serial.print("=BOARD_MODE_CLIENT) : ");
-  Serial.println(boardMode);
-  Serial.println("----------------------------------------------------------------------");
 
   // Uart for the inclinometer
-  if (boardMode == BOARD_MODE_SERVER)
-    Serial1.begin(115200, SERIAL_8N1, 18, 17);  // RX2=GPIO18, TX2=GPIO17
+  Serial1.begin(115200, SERIAL_8N1, 18, 17);  // RX2=GPIO18, TX2=GPIO17
 
   // Start wifi
   wifiMgr.start();
+
+  // Initial value
+  incAngularMemory.version = 0;
 }
 
 /*-------------------------------------------------------------------------------------------------------------------*/
 void loop (void)
 {
-  uint8_t wifiStatus;
+  uint8_t wifiAppStatus;
   struct strComData comData;
 
+  // First loop, identify the board
+  if (boardMode == BOARD_MODE_UNKNOWN)
+  {
+    if (identify_board () == BOARD_MODE_UNKNOWN)
+      return;
+  }  
+
+  // Server mode
   if (boardMode == BOARD_MODE_SERVER)
   {
-    // ------ Process incliometer data ---------
+    // ------ Process inclinometer data --------
     inclinometer.process_data ();
-    inclinometer.show_data ();
+    //inclinometer.show_data ();
     comData.incAcceleration     = inclinometer.get_acceleration_data();
     comData.inclAngularVelocity = inclinometer.get_angular_velocity_data();
     comData.incAngular          = inclinometer.get_angular_data();
+
+
+    // ------ Read button state ------------------
+    uint8_t buttonState = buttonMain.update();
+
+    if (buttonState == BUTTON_SHORT_PUSH)
+    {
+      incAngularMemory = comData.incAngular;
+    }
+    else if (buttonState == BUTTON_LONG_PUSH)
+    {
+      incAngularMemory.version = 0; //use the version to know if we must display or not
+    }
   
 
     // ------ Wifi management --------------------
-    wifiStatus = wifiMgr.server_update();
-    if ((wifiStatus == CONNECTION_STATUS_CONNECTED) && ((millis()-timerToSendWifiData_ms) > TIMER_REFRESH_WIFI_DATA_MS))
-    {
-      timerToSendWifiData_ms = millis();
-      wifiMgr.send_data(network_prepare_data(comData));
-    }
+    wifiAppStatus = wifiMgr.server_update();
+    wifiMgr.send_data(network_prepare_data(comData), TIMER_REFRESH_WIFI_DATA_MS);
 
 
     // ------ Screen drawing ---------------------
     drawerMgr.draw_background();
+    drawerMgr.draw_ping_status(wifiMgr.is_ping_received());
+    drawerMgr.draw_wifi_status(get_color_from_wifi_status(wifiAppStatus));
     drawerMgr.draw_main_point(comData.incAngular.angle[0], comData.incAngular.angle[1]);
     drawerMgr.draw_inclinometer_values(comData.incAngular.angle[0], comData.incAngular.angle[1]);
-    drawerMgr.draw_wifi_status(get_color_from_wifi_status(wifiStatus));
+    drawerMgr.draw_temperature_value(comData.incAcceleration.temperature);
 
-    delay(200);
+    if (incAngularMemory.version > 0)
+      drawerMgr.draw_memory_values(incAngularMemory.angle[0], incAngularMemory.angle[1]);
+
+    // Delay according wifi activity
+    if (wifiAppStatus == CONNECTION_STATUS_APP_DISCONNECTED)
+      delay(100);
+    else
+      delay(50);
   }
   
-
+  // Client mode
   if (boardMode == BOARD_MODE_CLIENT)
   {
     // ------ Read button state ------------------
     uint8_t buttonState = buttonMain.update();
 
     if (buttonState == BUTTON_LONG_PUSH)
+    {
+      soundMgr.play_mode_change();
       alarmMgr.switch_state();
+    }
 
 
     // ------ Wifi management --------------------
-    wifiStatus  = wifiMgr.client_update();
-    comData     = network_parse_data(wifiMgr.read_data());
+    wifiAppStatus  = wifiMgr.client_update();
+    comData = network_parse_data(wifiMgr.read_data(true));
 
 
     // ------ Screen drawing ---------------------
     drawerMgr.draw_background();
+    drawerMgr.draw_ping_status(wifiMgr.is_ping_received());
+    drawerMgr.draw_wifi_status(get_color_from_wifi_status(wifiAppStatus));
     drawerMgr.draw_main_point(comData.incAngular.angle[0], comData.incAngular.angle[1]);
     drawerMgr.draw_inclinometer_values(comData.incAngular.angle[0], comData.incAngular.angle[1]);
-    drawerMgr.draw_wifi_status(get_color_from_wifi_status(wifiStatus));
+    drawerMgr.draw_temperature_value(comData.incAcceleration.temperature);
 
 
     // ------ Alarm update -----------------------
@@ -165,11 +191,11 @@ void loop (void)
     }    
     drawerMgr.draw_alarm_state(get_color_from_alarm_state(alarmData.alarmState), get_text_from_alarm_state(alarmData.alarmState));
 
-
-    if (comData.error == 1)
-      delay(200);
+    // Delay according wifi activity
+    if (wifiAppStatus == CONNECTION_STATUS_APP_DISCONNECTED)
+      delay(100);
     else
-      delay(2);
+      delay(50);
   }
 }
 
@@ -183,25 +209,59 @@ void serialEvent1 (void)
 }
 
 /*-------------------------------------------------------------------------------------------------------------------*/
+uint8_t identify_board (void)
+{
+  uint8_t retval = BOARD_MODE_UNKNOWN;
+
+  // Indenty the board
+  if (inclinometer.is_new_data_ready())
+  {
+    boardMode = BOARD_MODE_SERVER;
+  }
+  else
+  {
+    if ((millis()-timerToIdentifyBoard_ms)>TIMER_IDENTIFY_BOARD_MS)
+      boardMode = BOARD_MODE_CLIENT;
+  }
+
+  if (boardMode != BOARD_MODE_UNKNOWN)
+  {
+    Serial.println("\n\n\n----------------------------------------------------------------------");
+    Serial.print("BOARD MODE : ");
+
+    if (boardMode == BOARD_MODE_SERVER)
+      Serial.println("SERVER");
+    else
+      Serial.println("CLIENT");
+    Serial.println("----------------------------------------------------------------------");
+  }
+
+  return retval;
+}
+
+/*-------------------------------------------------------------------------------------------------------------------*/
 std::vector<String> extract_substring (String _input, char _separator)
 {
-  uint16_t index      = 0;
-  uint16_t lastIndex  = 0;
+  int16_t index      = 0;
+  int16_t lastIndex  = 0;
   std::vector<String> retval;
 
-  while (index != -1)
+  if (_input != "")
   {
-    // Extract part of the string
-    index = _input.indexOf(_separator, lastIndex);
+    while (index != -1)
+    {
+      // Extract part of the string
+      index = _input.indexOf(_separator, lastIndex);
 
-    if (index != -1)
-    {
-      retval.push_back(_input.substring(lastIndex, index));
-      lastIndex = index + 1;
-    }
-    else
-    {
-      retval.push_back(_input.substring(lastIndex));
+      if (index != -1)
+      {
+        retval.push_back(_input.substring(lastIndex, index));
+        lastIndex = index + 1;
+      }
+      else
+      {
+        retval.push_back(_input.substring(lastIndex));
+      }
     }
   }
 
@@ -211,19 +271,21 @@ std::vector<String> extract_substring (String _input, char _separator)
 /*-------------------------------------------------------------------------------------------------------------------*/
 String network_prepare_data (struct strComData _data)
 {
-  String retval = "";
+  String retval = "isAlive=1;";
 
-  retval += "Xacc="+String(_data.incAcceleration.acceleration[0])+";";
-  retval += "Yacc="+String(_data.incAcceleration.acceleration[1])+";";
-  retval += "Zacc="+String(_data.incAcceleration.acceleration[2])+";";
+  retval += "Xac="+String(_data.incAcceleration.acceleration[0])+";";
+  retval += "Yac="+String(_data.incAcceleration.acceleration[1])+";";
+  retval += "Zac="+String(_data.incAcceleration.acceleration[2])+";";
 
-  retval += "Xangle="+String(_data.incAngular.angle[0])+";";
-  retval += "Yangle="+String(_data.incAngular.angle[1])+";";
-  retval += "Zangle="+String(_data.incAngular.angle[2])+";";
+  retval += "Xan="+String(_data.incAngular.angle[0])+";";
+  retval += "Yan="+String(_data.incAngular.angle[1])+";";
+  retval += "Zan="+String(_data.incAngular.angle[2])+";";
 
-  retval += "Xvelocity="+String(_data.inclAngularVelocity.velocity[0])+";";
-  retval += "Yvelocity="+String(_data.inclAngularVelocity.velocity[1])+";";
-  retval += "Zvelocity="+String(_data.inclAngularVelocity.velocity[2])+"\n";
+  retval += "Xve="+String(_data.inclAngularVelocity.velocity[0])+";";
+  retval += "Yve="+String(_data.inclAngularVelocity.velocity[1])+";";
+  retval += "Zve="+String(_data.inclAngularVelocity.velocity[2])+";";
+  
+  retval += "Tmp="+String(_data.incAcceleration.temperature);
 
   return retval;
 }
@@ -231,54 +293,73 @@ String network_prepare_data (struct strComData _data)
 /*-------------------------------------------------------------------------------------------------------------------*/
 struct strComData network_parse_data (String _data)
 {
-  struct strComData retval;
-  retval.error = 1;
-
-  if (_data != "")
+  static struct strComData retval;
+  
+  if ((_data == "") || (_data.length() == 1))
   {
-    retval.error = 0;
-    std::vector<String> DataList = extract_substring(_data, ';');
+    retval.error = 1;
+    return retval;
+  }
 
-    for (const auto& data : DataList)
+  // Data initialization
+  retval.error = 0;
+  retval.incAcceleration.acceleration[0] = 0.0;
+  retval.incAcceleration.acceleration[1] = 0.0;
+  retval.incAcceleration.acceleration[2] = 0.0;
+  retval.incAcceleration.temperature     = 0.0;
+  retval.incAngular.angle[0]             = 0.0;
+  retval.incAngular.angle[1]             = 0.0;
+  retval.incAngular.angle[2]             = 0.0;
+  retval.incAngular.version              = 0;
+  retval.inclAngularVelocity.velocity[0] = 0.0;
+  retval.inclAngularVelocity.velocity[1] = 0.0;
+  retval.inclAngularVelocity.velocity[2] = 0.0;
+  retval.inclAngularVelocity.voltage     = 0.0;
+
+  std::vector<String> DataList = extract_substring(_data, ';');
+  for (const auto& data : DataList)
+  {
+    std::vector<String> var = extract_substring(data, '=');
+
+    if (var.size() < 2)
     {
-      std::vector<String> var = extract_substring(_data, '=');
-
-      if (var.size() < 2)
-      {
-        Serial.println("-----------------------");
-        Serial.println("ERROR : invalid data from network");
-        Serial.println(_data);
-        Serial.println("-----------------------");
-        continue;
-      }
-
-      if (var[0] == "Xacc")
-        retval.incAcceleration.acceleration[0] = String(var[1]).toDouble();
-
-      if (var[0] == "Yacc")
-        retval.incAcceleration.acceleration[1] = String(var[1]).toDouble();;
-
-      if (var[0] == "Zacc")
-        retval.incAcceleration.acceleration[2] = String(var[1]).toDouble();;
-
-      if (var[0] == "Xangle")
-        retval.incAngular.angle[0] = String(var[1]).toDouble();;
-
-      if (var[0] == "Yangle")
-        retval.incAngular.angle[1] = String(var[1]).toDouble();;
-
-      if (var[0] == "Zangle")
-        retval.incAngular.angle[2] = String(var[1]).toDouble();;
-
-      if (var[0] == "Xvelocity")
-        retval.inclAngularVelocity.velocity[0] = String(var[1]).toDouble();;
-
-      if (var[0] == "Yvelocity")
-        retval.inclAngularVelocity.velocity[1] = String(var[1]).toDouble();;
-
-      if (var[0] == "Zvelocity")
-        retval.inclAngularVelocity.velocity[2] = String(var[1]).toDouble();;
+      Serial.print("ERROR : invalid data from networkc => ");
+      Serial.print("[");
+      Serial.print(_data);
+      Serial.print("] len=");
+      Serial.println(_data.length());
+      continue;
     }
+
+    if (var[0] == "Xac")
+      retval.incAcceleration.acceleration[0] = String(var[1]).toDouble();
+
+    if (var[0] == "Yac")
+      retval.incAcceleration.acceleration[1] = String(var[1]).toDouble();
+
+    if (var[0] == "Zac")
+      retval.incAcceleration.acceleration[2] = String(var[1]).toDouble();
+
+    if (var[0] == "Xan")
+      retval.incAngular.angle[0] = String(var[1]).toDouble();
+
+    if (var[0] == "Yan")
+      retval.incAngular.angle[1] = String(var[1]).toDouble();
+
+    if (var[0] == "Zan")
+      retval.incAngular.angle[2] = String(var[1]).toDouble();
+
+    if (var[0] == "Xve")
+      retval.inclAngularVelocity.velocity[0] = String(var[1]).toDouble();
+
+    if (var[0] == "Yve")
+      retval.inclAngularVelocity.velocity[1] = String(var[1]).toDouble();
+
+    if (var[0] == "Zve")
+      retval.inclAngularVelocity.velocity[2] = String(var[1]).toDouble();
+    
+    if (var[0] == "Tmp")
+      retval.incAcceleration.temperature = String(var[1]).toDouble();
   }
     
   return retval;
@@ -291,16 +372,15 @@ uint32_t get_color_from_wifi_status (uint8_t _status)
 
   switch (_status)
   {
-    case CONNECTION_STATUS_NOT_CONNECTED:
+    case CONNECTION_STATUS_APP_DISCONNECTED:
       color = TFT_RED;
       break;
 
-    case CONNECTION_STATUS_WAITING_CLIENT:
-    case CONNECTION_STATUS_WAITING_SERVER:
+    case CONNECTION_STATUS_APP_CONNECTING:
       color = TFT_ORANGE;
       break;
     
-    case CONNECTION_STATUS_CONNECTED:
+    case CONNECTION_STATUS_APP_CONNECTED:
       color = TFT_GREEN;
       break;
     

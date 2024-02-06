@@ -24,20 +24,33 @@
 
 
 /** D E F I N E S ****************************************************************************************************/
+// Wifi connection state
+#define CONNECTION_STATUS_WIFI_DISCONNECTED       (0)
+#define CONNECTION_STATUS_WIFI_CONNECTING         (1)
+#define CONNECTION_STATUS_WIFI_CONNECTED          (2)
+
 // Client and Server states
-#define CONNECTION_STATUS_NOT_CONNECTED         (0)
-#define CONNECTION_STATUS_WAITING_CLIENT        (1)
-#define CONNECTION_STATUS_WAITING_SERVER        (2)
-#define CONNECTION_STATUS_CONNECTED             (3)
+#define CONNECTION_STATUS_APP_DISCONNECTED        (0)
+#define CONNECTION_STATUS_APP_CONNECTING          (1)
+#define CONNECTION_STATUS_APP_CONNECTED           (2)
+
+// Timer
+#define CONNECTION_RETRY_INTERVAL_MS              (5000)
+#define CONNECTION_ALIVE_TIMEOUT_MS               (5000)
+#define CONNECTION_ALIVE_SEND_INTERVAL_MS         (1000)
 
 
 /** W I F I **********************************************************************************************************/
 class WifiManager
 {
 private:
-  uint8_t connectionState;
+  bool isPingReceived;
+  uint8_t wifiConnectionState;
+  uint8_t appConnectionState;
   WiFiServer server;
   WiFiClient client;
+  unsigned long timerCheckConnectionAlive_ms  = millis();
+  unsigned long timerToSendWifiData_ms        = millis();
 
 
 public:
@@ -46,7 +59,9 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   WifiManager (void)
   {
-    connectionState = CONNECTION_STATUS_NOT_CONNECTED;
+    this->isPingReceived      = false;
+    this->wifiConnectionState = CONNECTION_STATUS_WIFI_DISCONNECTED;
+    this->appConnectionState  = CONNECTION_STATUS_APP_DISCONNECTED;
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -55,101 +70,269 @@ public:
   void start (void)
   {
     WiFi.begin(wifi_ssid, wifi_key);
-    server = WiFiServer(wifi_port);
-  }  
+    this->server = WiFiServer(wifi_port);
+    this->wifiConnectionState = CONNECTION_STATUS_WIFI_CONNECTING;
+  }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
   // @brief [PUBLIC] Send data to a client
-  // @param _data : string to send 
+  // @param _data      : string to send 
+  // @param _period_ms : elapsed time in ms between two send frames
   /*-------------------------------------------------------------------------------------------------------------------*/
-  void send_data (String _data)
+  void send_data (String _data, unsigned long _period_ms)
   {
-    if (connectionState == CONNECTION_STATUS_CONNECTED)
-      client.println(_data);
+    if (this->appConnectionState == CONNECTION_STATUS_APP_CONNECTED)
+    {
+      if ((millis()-this->timerToSendWifiData_ms) > _period_ms)
+      {
+        this->client.println(_data);
+        this->timerToSendWifiData_ms = millis();
+      }
+    }
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
   // @brief [PUBLIC] Read data from the server
+  // @param _last_msg : return the latest received message
+  // @param _force    : force the read even if status is not connected
   // @return empty string if there is no data, otherwise received data
   /*-------------------------------------------------------------------------------------------------------------------*/
-  String read_data (void)
+  String read_data (bool _last_msg=false, bool _force=false)
   {
+    String previousRetval = "";
     String retval = "";
 
-    if (client)
-      retval = client.readStringUntil('\n');
-      
+    if ((_force == true) || (this->appConnectionState == CONNECTION_STATUS_APP_CONNECTED))
+    {
+      do
+      {
+        previousRetval = retval;
+        retval = "";
+
+        // Read data in the buffer
+        if (this->client.available())
+        {
+          retval = this->client.readStringUntil('\n');
+          
+          // Reset the watchdog
+          if (retval != "")
+            this->timerCheckConnectionAlive_ms = millis();
+          
+          // isAlive fram is only used by tye watchdog, filter this
+          if (retval.indexOf("isAlive") != -1)
+            this->isPingReceived = true;
+          
+          //Serial.print("received==["); Serial.print(retval);Serial.println("]");
+        }
+      } while ((_last_msg == true) && (retval != ""));
+
+      if (_last_msg == true)
+      {
+        retval = previousRetval;
+      }
+    }
+
     return retval;
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
-  // @brief [PUBLIC] Update server processing data
-  // @return CONNECTION_STATUS_NOT_CONNECTED | CONNECTION_STATUS_WAITING_CLIENT | CONNECTION_STATUS_CONNECTED
+  // @brief [PUBLIC] Allow user to see if a ping was received
+  // @return true | false
   /*-------------------------------------------------------------------------------------------------------------------*/
-  uint8_t server_update (void)
+  bool is_ping_received (void)
   {
-    // If we are not connected, stop the process waiting for a connection
-    if (WiFi.status() != WL_CONNECTED)
-    {
-      if (connectionState != CONNECTION_STATUS_NOT_CONNECTED)
-      {
-        server.end();
-        connectionState = CONNECTION_STATUS_NOT_CONNECTED;
-      }
-    }
-    else
-    {
-      // If we are connected but not yet started, we do it
-      if (connectionState == CONNECTION_STATUS_NOT_CONNECTED)
-      {
-        server.begin();
-        connectionState = CONNECTION_STATUS_WAITING_CLIENT;
-      }
-
-      // Now wait for a client
-      if (!client.connected())
-      {
-        client = server.available();
-        if (client)
-          Serial.println("Client connected");
-      }
-
-      // If we have a client, we send the AstroTool data
-      if (client.connected())
-      {
-        connectionState = CONNECTION_STATUS_CONNECTED;
-      }
-    }
-
-    return connectionState;
+    bool retval = this->isPingReceived;
+    this->isPingReceived = false;
+    
+    return retval;
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
-  // @brief [PUBLIC] Update client processing data
-  // @return CONNECTION_STATUS_NOT_CONNECTED | CONNECTION_STATUS_WAITING_SERVER | CONNECTION_STATUS_CONNECTED
+  // @brief [PUBLIC] Update server state
+  // @return CONNECTION_STATUS_APP_DISCONNECTED | CONNECTION_STATUS_APP_CONNECTING | CONNECTION_STATUS_APP_CONNECTED
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  uint8_t server_update (void)
+  {
+    // Update Wifi connection state
+    this->wifi_manage();
+
+    // If we are connected to the router
+    if (this->wifiConnectionState == CONNECTION_STATUS_WIFI_CONNECTED)
+    { 
+      // Not yet connected
+      if (this->appConnectionState == CONNECTION_STATUS_APP_DISCONNECTED)
+      {
+        this->server.begin();
+        this->appConnectionState = CONNECTION_STATUS_APP_CONNECTING;
+        Serial.println("WIFI : server started !");
+      }
+
+      // Check client status
+      else
+      {
+        if ((!this->client.connected()) || ((this->appConnectionState == CONNECTION_STATUS_APP_CONNECTED) && (!this->is_connection_alive())))
+        {
+          if (this->appConnectionState == CONNECTION_STATUS_APP_CONNECTED)
+            Serial.println("WIFI : connection lost with client !");
+          
+          this->appConnectionState = CONNECTION_STATUS_APP_CONNECTING;
+          this->client = this->server.available();
+        }
+        else
+        {
+          if (this->appConnectionState == CONNECTION_STATUS_APP_CONNECTING)
+          {
+            this->timerCheckConnectionAlive_ms = millis();
+            this->appConnectionState = CONNECTION_STATUS_APP_CONNECTED;
+            Serial.println("WIFI : client connected !");
+          }
+          else
+          {
+            // Refresh the ping
+            this->read_data(true, false);
+          }
+        }
+      }
+    }
+
+    // Wifi disconnected
+    else
+    {
+      if (this->appConnectionState != CONNECTION_STATUS_APP_DISCONNECTED)
+      {
+        Serial.println("WIFI : server closed !");
+        this->server.end();
+      }
+
+      this->appConnectionState = CONNECTION_STATUS_APP_DISCONNECTED;
+    }
+
+    return this->appConnectionState;
+  }
+
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  // @brief [PUBLIC] Update client state
+  // @return CONNECTION_STATUS_APP_DISCONNECTED | CONNECTION_STATUS_APP_CONNECTING | CONNECTION_STATUS_APP_CONNECTED
   /*-------------------------------------------------------------------------------------------------------------------*/
   uint8_t client_update (void)
   {
-    // If we are not connected, stop the process waiting for a connection
-    if (WiFi.status() != WL_CONNECTED)
-    {
-      connectionState = CONNECTION_STATUS_NOT_CONNECTED;
+    // Update Wifi connection state
+    this->wifi_manage();
+
+    // If we are connected to the router
+    if (this->wifiConnectionState == CONNECTION_STATUS_WIFI_CONNECTED)
+    { 
+      // Not yet connected
+      if (this->appConnectionState == CONNECTION_STATUS_APP_DISCONNECTED)
+      {
+        this->client.connect(wifi_ip_server, wifi_port);
+        this->timerCheckConnectionAlive_ms = millis();
+        this->appConnectionState = CONNECTION_STATUS_APP_CONNECTING;
+        Serial.println("WIFI : client connection...");
+      }
+
+      // Wait for server connection
+      if (this->appConnectionState == CONNECTION_STATUS_APP_CONNECTING)
+      {
+        if (this->client.connected())
+        {
+          this->timerCheckConnectionAlive_ms = millis();
+          this->appConnectionState = CONNECTION_STATUS_APP_CONNECTED;
+          Serial.println("WIFI : connected to the server !");
+        }
+        else
+        {
+          // Retry to connect
+          if ((millis()-this->timerCheckConnectionAlive_ms) > CONNECTION_RETRY_INTERVAL_MS)
+          {
+            this->client.stop();
+            this->flush();
+            this->client.connect(wifi_ip_server, wifi_port);
+            this->timerCheckConnectionAlive_ms = millis();
+          }
+        }
+      }
+
+      // Check for connection status
+      if (this->appConnectionState == CONNECTION_STATUS_APP_CONNECTED)
+      {
+        this->send_data("isAlive", CONNECTION_ALIVE_SEND_INTERVAL_MS);
+
+        // Check connection status
+        if (!this->is_connection_alive())
+        {
+          this->appConnectionState = CONNECTION_STATUS_APP_DISCONNECTED;
+          this->client.stop();
+          this->flush();
+          Serial.println("WIFI : disconnected from the server !");
+        }
+      }
     }
+
+    // Wifi disconnected
     else
-    {      
-      if (connectionState == CONNECTION_STATUS_NOT_CONNECTED)
+    {
+      if (this->appConnectionState != CONNECTION_STATUS_APP_DISCONNECTED)
       {
-        connectionState = CONNECTION_STATUS_WAITING_SERVER;
-        client.connect(wifi_ip_server, wifi_port);
+        Serial.println("WIFI : connection lost !");
+        client.stop();
       }
 
-      if (client.connected())
-      {
-        connectionState = CONNECTION_STATUS_CONNECTED;
-        Serial.println("Connected to the server");
-      }
+      this->appConnectionState = CONNECTION_STATUS_APP_DISCONNECTED;
     }
 
-    return connectionState;
+    return this->appConnectionState;
+  }
+
+
+private:
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  // @brief [PRIVATE] Manage connection state with the Wifi router
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  void wifi_manage (void)
+  {
+    // Connected to the wifi router
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      if (this->wifiConnectionState == CONNECTION_STATUS_WIFI_CONNECTING)
+        Serial.println("WIFI : connected to the router !");
+      
+      this->wifiConnectionState = CONNECTION_STATUS_WIFI_CONNECTED;
+    }
+    // Disconnected or not yet connected
+    else
+    {
+      // Lost Wifi connection
+      if (this->wifiConnectionState != CONNECTION_STATUS_WIFI_CONNECTING)
+      {
+        this->wifiConnectionState = CONNECTION_STATUS_WIFI_CONNECTING;
+        WiFi.reconnect();
+        Serial.println("WIFI : connecting to the router...");
+      }
+    }
+  }
+
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  // @brief [PRIVATE] Get connection status with the other device
+  // @return true | false
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  bool is_connection_alive (void)
+  {
+    bool retval = false;
+
+    // timer was reseted when a 'isAlive' data is received
+    if ((millis()-this->timerCheckConnectionAlive_ms) < CONNECTION_ALIVE_TIMEOUT_MS)
+      retval = true;
+
+    return retval;
+  }
+
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  // @brief [PRIVATE] Flush Rx buffer
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  void flush (void)
+  {
+    while (this->read_data(false, true) != "");
+    this->isPingReceived = false;
   }
 };

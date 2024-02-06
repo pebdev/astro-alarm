@@ -71,6 +71,8 @@ private:
   struct strAngularRaw incAngularRaw;
 
   // Final data, shared with users
+  bool firstFrameDetected;
+  bool newDataReady;
   struct strAcceleration incAcceleration;
   struct strAngularVelocity inclAngularVelocity;
   struct strAngular incAngular;
@@ -82,7 +84,17 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   Inclinometer (void)
   {
-    //
+    this->newDataReady        = false;
+    this->firstFrameDetected  = false;
+  }
+
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  // @brief [PUBLIC] Allow user to know if there is new data ready to be proccessed
+  // @return true | false
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  bool is_new_data_ready (void)
+  {
+    return this->newDataReady;
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -114,9 +126,9 @@ public:
     {
       switch(ucRxBuffer[1])
       {
-        case 0x51:	memcpy(&incAccelerationRaw,&ucRxBuffer[2],9);break;
-        case 0x52:	memcpy(&inclAngularVelocityRaw,&ucRxBuffer[2],9);break;
-        case 0x53:	memcpy(&incAngularRaw,&ucRxBuffer[2],9);break;
+        case 0x51:	memcpy(&this->incAccelerationRaw,&ucRxBuffer[2],9);     this->newDataReady = true; break;
+        case 0x52:	memcpy(&this->inclAngularVelocityRaw,&ucRxBuffer[2],9); this->newDataReady = true; break;
+        case 0x53:	memcpy(&this->incAngularRaw,&ucRxBuffer[2],9);          this->newDataReady = true; break;
       }
       ucRxCnt = 0;
     }
@@ -127,34 +139,47 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   void process_data (void)
   {
-    if (incAccelerationRaw.checksum == checksum(&incAccelerationRaw, 0x51))
+    // Proccess data only if we have new data 
+    if (this->newDataReady == false)
+      return;
+    this->newDataReady = false;
+
+    // Because the first frame can't be good, skip it
+    if (this->firstFrameDetected == false)
     {
-      incAcceleration.acceleration[0] = (double)incAccelerationRaw.acceleration[0]/32768.0*16.0;
-      incAcceleration.acceleration[1] = (double)incAccelerationRaw.acceleration[1]/32768.0*16.0;
-      incAcceleration.acceleration[2] = (double)incAccelerationRaw.acceleration[2]/32768.0*16.0;
-      incAcceleration.temperature     = (double)incAccelerationRaw.temperature/100.0;
+      this->firstFrameDetected = true;
+      return;
+    }
+
+    if (this->incAccelerationRaw.checksum == this->checksum(&this->incAccelerationRaw, 0x51))
+    {
+      this->incAcceleration.acceleration[0] = this->value_saturation((double)this->incAccelerationRaw.acceleration[0]/32768.0*16.0, 16.0);
+      this->incAcceleration.acceleration[1] = this->value_saturation((double)this->incAccelerationRaw.acceleration[1]/32768.0*16.0, 16.0);
+      this->incAcceleration.acceleration[2] = this->value_saturation((double)this->incAccelerationRaw.acceleration[2]/32768.0*16.0, 16.0);
+      this->incAcceleration.temperature     = (double)this->incAccelerationRaw.temperature/100.0;
     }
     else
     {
       Serial.println("acceleration : CHECKSUM ERROR");
     }
 
-    if (inclAngularVelocityRaw.checksum == checksum(&inclAngularVelocityRaw, 0x52))
+    if (this->inclAngularVelocityRaw.checksum == this->checksum(&this->inclAngularVelocityRaw, 0x52))
     {
-      inclAngularVelocity.velocity[0] = (double)inclAngularVelocityRaw.velocity[0]/32768.0*2000.0;
-      inclAngularVelocity.velocity[1] = (double)inclAngularVelocityRaw.velocity[1]/32768.0*2000.0;
-      inclAngularVelocity.velocity[2] = (double)inclAngularVelocityRaw.velocity[2]/32768.0*2000.0;
+      this->inclAngularVelocity.velocity[0] = this->value_saturation((double)this->inclAngularVelocityRaw.velocity[0]/32768.0*2000.0, 2000.0);
+      this->inclAngularVelocity.velocity[1] = this->value_saturation((double)this->inclAngularVelocityRaw.velocity[1]/32768.0*2000.0, 2000.0);
+      this->inclAngularVelocity.velocity[2] = this->value_saturation((double)this->inclAngularVelocityRaw.velocity[2]/32768.0*2000.0, 2000.0);
     }
     else
     {
       Serial.println("velocity : CHECKSUM ERROR");
     }
 
-    if (incAngularRaw.checksum == checksum(&incAngularRaw, 0x53))
+    if (this->incAngularRaw.checksum == this->checksum(&this->incAngularRaw, 0x53))
     {
-      incAngular.angle[0] = angle_converter((double)incAngularRaw.angle[0]/32768.0*180.0);
-      incAngular.angle[1] = angle_converter((double)incAngularRaw.angle[1]/32768.0*180.0);
-      incAngular.angle[2] = angle_converter((double)incAngularRaw.angle[2]/32768.0*180.0);
+      this->incAngular.angle[0] = this->value_saturation((double)this->incAngularRaw.angle[0]/32768.0*180.0, 180.0);
+      this->incAngular.angle[1] = this->value_saturation((double)this->incAngularRaw.angle[1]/32768.0*180.0, 180.0);
+      this->incAngular.angle[2] = this->value_saturation((double)this->incAngularRaw.angle[2]/32768.0*180.0, 180.0);
+      this->incAngular.version  = this->incAngularRaw.version;
     }
     else
     {
@@ -168,7 +193,7 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   struct strAcceleration get_acceleration_data (void)
   {
-    return incAcceleration;
+    return this->incAcceleration;
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -177,7 +202,7 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   struct strAngularVelocity get_angular_velocity_data (void)
   {
-    return inclAngularVelocity;
+    return this->inclAngularVelocity;
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -186,7 +211,7 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   struct strAngular get_angular_data (void)
   {
-    return incAngular;
+    return this->incAngular;
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -195,30 +220,30 @@ public:
   void show_data (void)
   {
     Serial.println("-----------------------------------------------");
-    Serial.print("acceleration : X=");
-    Serial.print(incAcceleration.acceleration[0]);
+    Serial.print("angular      : X=");
+    Serial.print(this->incAngular.angle[0]);
     Serial.print(" | Y=");
-    Serial.print(incAcceleration.acceleration[1]);
+    Serial.print(this->incAngular.angle[1]);
     Serial.print(" | Z=");
-    Serial.println(incAcceleration.acceleration[2]);
+    Serial.print(this->incAngular.angle[2]);
+    Serial.println(" (X=Roll | Y=Pitch | Z=Yaw)");
 
-    Serial.print("temperature  : T=");
-    Serial.println(incAcceleration.temperature);
+    Serial.print("acceleration : X=");
+    Serial.print(this->incAcceleration.acceleration[0]);
+    Serial.print(" | Y=");
+    Serial.print(this->incAcceleration.acceleration[1]);
+    Serial.print(" | Z=");
+    Serial.println(this->incAcceleration.acceleration[2]);
 
     Serial.print("velocity     : X=");
-    Serial.print(inclAngularVelocity.velocity[0]);
+    Serial.print(this->inclAngularVelocity.velocity[0]);
     Serial.print(" | Y=");
-    Serial.print(inclAngularVelocity.velocity[1]);
+    Serial.print(this->inclAngularVelocity.velocity[1]);
     Serial.print(" | Z=");
-    Serial.println(inclAngularVelocity.velocity[2]);
+    Serial.println(this->inclAngularVelocity.velocity[2]);
 
-    Serial.print("angular      : X=");
-    Serial.print(incAngular.angle[0]);
-    Serial.print(" | Y=");
-    Serial.print(incAngular.angle[1]);
-    Serial.print(" | Z=");
-    Serial.print(incAngular.angle[2]);
-    Serial.println(" (X=Roll | Y=Pitch | Z=Yaw)");
+    Serial.print("temperature  : T=");
+    Serial.println(this->incAcceleration.temperature);
   }
 
 
@@ -241,16 +266,31 @@ private:
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
-  // @brief [PRIVATE] Convert angle from [0:360] to [-180:180]
-  // @param _angle : angle to convert
-  // @return angle from [0:360]
+  // @brief [PRIVATE] Apply a 180° on an axis : -180°=+180° ==> 0°
+  // @param _angle : angle to invert
+  // @return inverted angle
   /*-------------------------------------------------------------------------------------------------------------------*/
-  double angle_converter (double _angle)
+  double angle_inverter (double _angle)
   {
-    // Convert angle in the range [-180°, 180°]
-    if (_angle > 180)
-      _angle -= 360;
+    _angle += 180;
 
+    if (_angle > 180.0)
+      _angle -= 360.0;
+      
     return _angle;
+  }
+
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  // @brief [PRIVATE] Saturation of a value
+  // @param _value      : value to check
+  // @param _value_max  : max value to check
+  // @return value or saturated value
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  double value_saturation (double _value, double _value_max)
+  {
+    if (_value >= _value_max)
+      _value -= 2.0 * _value_max;
+
+    return _value;
   }
 };

@@ -61,14 +61,14 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   AlarmManager (void)
   {
-    alarmData.alarmStatus   = ALARM_STATUS_NOT_TRIGGERED;
-    alarmData.alarmState    = ALARM_STATE_OFF;
-    alarmData.XaccInit      = 0.0;
-    alarmData.YaccInit      = 0.0;
-    alarmData.ZaccInit      = 0.0;
-    alarmData.XaccCurrent   = 0.0;
-    alarmData.YaccCurrent   = 0.0;
-    alarmData.ZaccCurrent   = 0.0;
+    this->alarmData.alarmStatus   = ALARM_STATUS_NOT_TRIGGERED;
+    this->alarmData.alarmState    = ALARM_STATE_OFF;
+    this->alarmData.XaccInit      = 0.0;
+    this->alarmData.YaccInit      = 0.0;
+    this->alarmData.ZaccInit      = 0.0;
+    this->alarmData.XaccCurrent   = 0.0;
+    this->alarmData.YaccCurrent   = 0.0;
+    this->alarmData.ZaccCurrent   = 0.0;
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -76,14 +76,16 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   void switch_state (void)
   {
-    if ((alarmData.alarmState == ALARM_STATE_ON) || (alarmData.alarmState == ALARM_STATE_LOCKED))
+    if ((this->alarmData.alarmState == ALARM_STATE_ON) || (this->alarmData.alarmState == ALARM_STATE_LOCKED))
     {
-      alarmData.alarmState  = ALARM_STATE_OFF;
-      alarmData.alarmStatus = ALARM_STATUS_NOT_TRIGGERED;
+      this->alarmData.alarmState  = ALARM_STATE_OFF;
+      this->alarmData.alarmStatus = ALARM_STATUS_NOT_TRIGGERED;
+      Serial.println("ALARM : OFF");
     }
     else
     {
-      alarmData.alarmState  = ALARM_STATE_ENABLING;
+      this->alarmData.alarmState  = ALARM_STATE_ENABLING;
+      Serial.println("ALARM : ON");
     }
   }
   
@@ -96,40 +98,41 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   struct strAlarmData update (double _Xacc, double _Yacc, double _Zacc)
   {
-    double margin = 1.0;
+    double margin = 0.05;
 
     // When we enable alarm, we record current inclinometer data to display these when alarm is triggered
-    if (alarmData.alarmState == ALARM_STATE_ENABLING)
+    if (this->alarmData.alarmState == ALARM_STATE_ENABLING)
     {
-      alarmData.XaccInit      = _Xacc;
-      alarmData.YaccInit      = _Yacc;
-      alarmData.ZaccInit      = _Zacc;
-      alarmData.alarmState    = ALARM_STATE_ON;
+      this->alarmData.XaccInit      = _Xacc;
+      this->alarmData.YaccInit      = _Yacc;
+      this->alarmData.ZaccInit      = _Zacc;
+      this->alarmData.alarmState    = ALARM_STATE_ON;
     }
 
-    alarmData.XaccCurrent   = _Xacc;
-    alarmData.YaccCurrent   = _Yacc;
-    alarmData.ZaccCurrent   = _Zacc;
+    this->alarmData.XaccCurrent   = _Xacc;
+    this->alarmData.YaccCurrent   = _Yacc;
+    this->alarmData.ZaccCurrent   = _Zacc;
 
     // If alarm is enabled
-    if (alarmData.alarmState == ALARM_STATE_ON)
+    if (this->alarmData.alarmState == ALARM_STATE_ON)
     {
       // Check trigger
-      if ((alarmData.alarmState == ALARM_STATE_LOCKED) 
-       || ((!is_in_range(alarmData.XaccInit, alarmData.XaccCurrent, margin) 
-         || !is_in_range(alarmData.YaccInit, alarmData.YaccCurrent, margin) 
-         || !is_in_range(alarmData.ZaccInit, alarmData.ZaccCurrent, margin))))
+      if ((this->alarmData.alarmState == ALARM_STATE_LOCKED) 
+         || ((!this->is_in_range(this->alarmData.XaccInit, this->alarmData.XaccCurrent, margin) 
+         ||   !this->is_in_range(this->alarmData.YaccInit, this->alarmData.YaccCurrent, margin) 
+         ||   !this->is_in_range(this->alarmData.ZaccInit, this->alarmData.ZaccCurrent, margin))))
       {
-        alarmData.alarmState  = ALARM_STATE_LOCKED;
-        alarmData.alarmStatus = ALARM_STATUS_TRIGGERED;
+        this->alarmData.alarmState  = ALARM_STATE_LOCKED;
+        this->alarmData.alarmStatus = ALARM_STATUS_TRIGGERED;
+        Serial.println("ALARM : TRIGGERED");
       }
       else
       {
-        alarmData.alarmStatus = ALARM_STATUS_NOT_TRIGGERED;
+        this->alarmData.alarmStatus = ALARM_STATUS_NOT_TRIGGERED;
       }
     }
     
-    return alarmData;
+    return this->alarmData;
   }
 
 

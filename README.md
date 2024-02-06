@@ -10,7 +10,7 @@ Goal of the Astro Alarm :
 
 We need this material :
 - LilyGo T-Display S3
-- 3.7V Lipo battery (optional)
+- 3.7V Lipo battery (optional)
 - HWT906 sensor (**Astro Alarm Server** only)
 - Buzzer (**Astro Alarm Client** only)
 
@@ -44,11 +44,8 @@ Buzzer connection :
 ### Packages
 You need these libraries :
 - Hardware Buttons (with the IDE)
-- TFT_eSPI (manual installation)
-  **1-** Download official board documents : [link](https://github.com/Xinyuan-LilyGO/T-Display-S3)  
-  **2-** Do a zip file of the **lib/TFT_eSPI** folder  
-  **3-** Add to the Arduino libraries  
-  **4-** Because there is a problem with the TFT library, you must replace the **User_Setup_Select.h** file in the library folder by the file provided with the Astro Alarm repo.
+- TFT_eSPI (with IDE)
+  Note : because there is a problem with the TFT library, you must replace the **User_Setup_Select.h** file in the library folder by the file provided with the Astro Alarm repo. If the livrary is updated, you must do it again.
 
 ### Programmation
 If you have an error when flashing the board, just unplug USB-C, push the bottom button and plug USB-C.
@@ -57,17 +54,12 @@ If you have an error when flashing the board, just unplug USB-C, push the bottom
 ---
 ## Arduino Software
 
-Before to build the software, you must choose if you would like to build the software in **server** or **client** mode.
-To do that, just set the variable boardMode in the setup function :
-
-```
-  //------------------------------------------------------------------------------------
-  // TO SET BEFORE TO COMPILE THE SOFWARE : BOARD_MODE_SERVER | BOARD_MODE_CLIENT
-  //------------------------------------------------------------------------------------
-  boardMode = BOARD_MODE_SERVER;
-```
+Server or Client mode is automatically selected by the software, the software is the same for both board.
 
 ### Button usage
-On the server side, buttons are not used
-On the client side, you can use the top button like this :
-- Long push : switch the alarm mode (on -> off | stop-alert -> on -> …)
+#### Server side
+- **short push** : memory function for angular values. Will update the memory at each short push
+- **long push** : remove the memory values from the screen
+
+#### Client side
+- **long push** : switch the alarm mode (on -> off | stop-alert -> on -> …)

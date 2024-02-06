@@ -23,6 +23,7 @@
 #include "inclinometer.h"
 #include "buttonManager.h"
 #include "wifiManager.h"
+#include "tftManager.h"
 #include "soundManager.h"
 #include "drawerManager.h"
 #include "alarmManager.h"
@@ -31,7 +32,7 @@
 /** D E F I N E S ****************************************************************************************************/
 // GPIO
 #define GPIO_IN_BUTTON              (14)
-#define GPIO_OUT_BUZZER             (16)
+#define GPIO_OUT_BUZZER             (21)
 
 // Board modes
 #define BOARD_MODE_UNKNOWN          (0)
@@ -61,6 +62,7 @@ uint8_t boardMode = BOARD_MODE_UNKNOWN;
 Inclinometer inclinometer = Inclinometer();
 ButtonManager buttonMain  = ButtonManager(GPIO_IN_BUTTON);
 WifiManager wifiMgr       = WifiManager();
+TftManager tftMgr         = TftManager();
 
 // UI
 DrawerManager drawerMgr   = DrawerManager();
@@ -119,11 +121,11 @@ void loop (void)
 
     if (buttonState == BUTTON_SHORT_PUSH)
     {
-      incAngularMemory = comData.incAngular;
+      tftMgr.switch_state();
     }
     else if (buttonState == BUTTON_LONG_PUSH)
     {
-      incAngularMemory.version = 0; //use the version to know if we must display or not
+      incAngularMemory = comData.incAngular;
     }
   
 
@@ -156,10 +158,17 @@ void loop (void)
     // ------ Read button state ------------------
     uint8_t buttonState = buttonMain.update();
 
+    if (buttonState == BUTTON_SHORT_PUSH)
+    {
+      tftMgr.switch_state();
+    }
     if (buttonState == BUTTON_LONG_PUSH)
     {
       soundMgr.play_mode_change();
-      alarmMgr.switch_state();
+      if (alarmMgr.switch_state() == ALARM_STATE_ENABLING)
+        tftMgr.enable_auto_shutdown();
+      else
+        tftMgr.disable_auto_shutdown();
     }
 
 
@@ -167,8 +176,12 @@ void loop (void)
     wifiAppStatus  = wifiMgr.client_update();
     comData = network_parse_data(wifiMgr.read_data(true));
 
+    if (wifiAppStatus != CONNECTION_STATUS_APP_CONNECTED)
+      tftMgr.enable();
+
 
     // ------ Screen drawing ---------------------
+    tftMgr.update();
     drawerMgr.draw_background();
     drawerMgr.draw_ping_status(wifiMgr.is_ping_received());
     drawerMgr.draw_wifi_status(get_color_from_wifi_status(wifiAppStatus));
@@ -181,6 +194,9 @@ void loop (void)
     struct strAlarmData alarmData = alarmMgr.update(comData.incAcceleration.acceleration[0], comData.incAcceleration.acceleration[1], comData.incAcceleration.acceleration[2]);
     if (alarmData.alarmStatus == ALARM_STATUS_TRIGGERED)
     {
+      tftMgr.disable_auto_shutdown();
+      tftMgr.enable();
+
       drawerMgr.draw_alarm_data(alarmData.XaccInit, alarmData.YaccInit, alarmData.ZaccInit,
                                 alarmData.XaccCurrent, alarmData.YaccCurrent, alarmData.ZaccCurrent);
       soundMgr.play_alarm();
@@ -211,8 +227,6 @@ void serialEvent1 (void)
 /*-------------------------------------------------------------------------------------------------------------------*/
 uint8_t identify_board (void)
 {
-  uint8_t retval = BOARD_MODE_UNKNOWN;
-
   // Indenty the board
   if (inclinometer.is_new_data_ready())
   {
@@ -222,6 +236,8 @@ uint8_t identify_board (void)
   {
     if ((millis()-timerToIdentifyBoard_ms)>TIMER_IDENTIFY_BOARD_MS)
       boardMode = BOARD_MODE_CLIENT;
+    else
+      boardMode = BOARD_MODE_UNKNOWN;
   }
 
   if (boardMode != BOARD_MODE_UNKNOWN)
@@ -236,7 +252,7 @@ uint8_t identify_board (void)
     Serial.println("----------------------------------------------------------------------");
   }
 
-  return retval;
+  return boardMode;
 }
 
 /*-------------------------------------------------------------------------------------------------------------------*/

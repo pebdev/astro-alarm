@@ -86,7 +86,7 @@ public:
     button.onLongPressing = &button_onLongPressing;
 
     // Button settings
-    button.setPressTimeout(600);
+    button.setPressTimeout(400);
     button.setLongPressTimeout(1000);
   }
 

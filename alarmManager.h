@@ -73,8 +73,9 @@ public:
 
   /*-------------------------------------------------------------------------------------------------------------------*/
   // @brief [PUBLIC] Switch the alarm state : ON -> OFF -> ON -> ...
+  // @return ALARM_STATE_OFF | ALARM_STATE_ENABLING
   /*-------------------------------------------------------------------------------------------------------------------*/
-  void switch_state (void)
+  uint8_t switch_state (void)
   {
     if ((this->alarmData.alarmState == ALARM_STATE_ON) || (this->alarmData.alarmState == ALARM_STATE_LOCKED))
     {
@@ -87,6 +88,8 @@ public:
       this->alarmData.alarmState  = ALARM_STATE_ENABLING;
       Serial.println("ALARM : ON");
     }
+
+    return this->alarmData.alarmState;
   }
   
   /*-------------------------------------------------------------------------------------------------------------------*/

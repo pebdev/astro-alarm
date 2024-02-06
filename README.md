@@ -2,17 +2,17 @@
 
 ## Presentation
 
-Goal of the Astro Alarm :
-- Include a silent alarm, connected to a Astro AlarmClient which receive notification if the mount is moved
-- Provide mount angles to help during installation phase
+**Goal of the Astro Alarm :**
+- Include a silent alarm : Astro Alarm Server send data to the Astro Alarm Client which monitor the alarm status
+- Inclinometer : provide mount angles to help user during installation phase
 
 **Astro Alarm Server** and **Astro Alarm Client** are based on the same hardware and the same software. The only difference, is the inclinometer sensor connected to the **Astro Alarm Server** but not on the **Astro Alarm Client**, and the Buzzer on the **Astro Alarm Client**.
 
 We need this material :
-- LilyGo T-Display S3
-- 3.7V Lipo battery (optional)
-- HWT906 sensor (**Astro Alarm Server** only)
-- Buzzer (**Astro Alarm Client** only)
+- (x2) LilyGo T-Display S3
+- (x2) 3.7V Lipo battery (optional)
+- (x1) HWT906 sensor (**Astro Alarm Server** only)
+- (x1) Buzzer (**Astro Alarm Client** only)
 
 
 ---
@@ -32,7 +32,7 @@ Cable connection :
 Buzzer connection :
 | Type | Pin |
 |:----:|:---:|
-| +    | 16  |
+| +    | 21  |
 
 ---
 ## Arduino IDE
@@ -42,10 +42,11 @@ Buzzer connection :
 **Board** : LilyGo T-Display-S3
 
 ### Packages
-You need these libraries :
-- Hardware Buttons (with the IDE)
-- TFT_eSPI (with IDE)
-  Note : because there is a problem with the TFT library, you must replace the **User_Setup_Select.h** file in the library folder by the file provided with the Astro Alarm repo. If the livrary is updated, you must do it again.
+You need these libraries (to add with the IDE library manager):
+- Hardware Buttons
+- TFT_eSPI  
+  *Note : because there is a problem with the TFT library, you must replace the **User_Setup_Select.h** file in the TFT_eSPI library folder by the file provided with the Astro Alarm repo.  
+  If the livrary is updated, you must do it again.*
 
 ### Programmation
 If you have an error when flashing the board, just unplug USB-C, push the bottom button and plug USB-C.
@@ -54,12 +55,21 @@ If you have an error when flashing the board, just unplug USB-C, push the bottom
 ---
 ## Arduino Software
 
+### Board mode
 Server or Client mode is automatically selected by the software, the software is the same for both board.
+
+### TFT Auto shutdown
+Client board has a TFT auto shutdown mechanism. This mechanism is enabled only when the alarm is enabled.  
+
+TFT will be automatically switch to ON in these conditions :
+- if the connection with the router or the server is lost
+- if alarm is triggered
 
 ### Button usage
 #### Server side
-- **short push** : memory function for angular values. Will update the memory at each short push
-- **long push** : remove the memory values from the screen
+- **short push** : switch the TFT blacklight state
+- **long push** : memory function for angular values. Will update the memory at each short push
 
 #### Client side
-- **long push** : switch the alarm mode (on -> off | stop-alert -> on -> …)
+- **short push** : switch the TFT blacklight state
+- **long push** : switch the alarm mode (on -> off | stop-alert -> off -> …)

@@ -19,7 +19,7 @@
 
 
 /** D E F I N E S ****************************************************************************************************/
-//#define CONFIG_SOUND_ENABLED      (0)
+#define CONFIG_SOUND_ENABLED        (1)
 
 
 /** S O U N D ********************************************************************************************************/
@@ -52,8 +52,6 @@ public:
     #ifdef CONFIG_SOUND_ENABLED
     tone(this->pin, 4000, 250);
     #endif
-
-    delay(500);
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -61,22 +59,22 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   void play_alarm (void)
   {
-    #ifdef CONFIG_SOUND_ENABLED
-    const byte countNotes = 8;
+    const byte countNotes = 3;
     int frequences[countNotes] = {
-      2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000
+      1000, 1000, 1000
     };
     int durations[countNotes] = {
-      300, 300, 300, 300, 300, 300, 300, 300
+      50, 50, 50
     };
 
     for (int i=0; i<countNotes; i++)
     {
+      #ifdef CONFIG_SOUND_ENABLED
       tone(this->pin, frequences[i], durations[i] * 2);
-      delay(durations[i] * 2);
+      #endif
+      delay(durations[i] * 3);
       noTone(this->pin);
     }
-    #endif
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/

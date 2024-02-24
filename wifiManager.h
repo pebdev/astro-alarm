@@ -121,8 +121,6 @@ public:
           // isAlive fram is only used by tye watchdog, filter this
           if (retval.indexOf("isAlive") != -1)
             this->isPingReceived = true;
-          
-          //Serial.print("received==["); Serial.print(retval);Serial.println("]");
         }
       } while ((_last_msg == true) && (retval != ""));
 
@@ -144,6 +142,17 @@ public:
     bool retval = this->isPingReceived;
     this->isPingReceived = false;
     
+    return retval;
+  }
+
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  // @brief [PUBLIC] Allow user to get the Wifi strength.
+  // @return quality in percentage
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  int8_t signal_strength (void)
+  {
+    int8_t retval = map(WiFi.RSSI(), -100, -20, 0, 100);
+    retval = constrain(retval, 0, 100);
     return retval;
   }
 

@@ -71,6 +71,7 @@ AlarmManager alarmMgr     = AlarmManager();
 
 // Timer
 unsigned long timerToIdentifyBoard_ms = millis();
+unsigned long timerButtonDelay_ms     = millis();
 
 // Memory
 struct strAngular incAngularMemory;
@@ -79,6 +80,9 @@ struct strAngular incAngularMemory;
 /** M A I N  F U N C T I O N S ***************************************************************************************/
 void setup (void)
 {
+  // Used to mesure the battery voltage
+  analogReadResolution(12);
+
   // Debug connection
   Serial.begin(115200);
 
@@ -95,17 +99,24 @@ void setup (void)
 /*-------------------------------------------------------------------------------------------------------------------*/
 void loop (void)
 {
+  int8_t wifiStrength;
   uint8_t wifiAppStatus;
   struct strComData comData;
 
+  // --- COMMON --------------------------------------
   // First loop, identify the board
   if (boardMode == BOARD_MODE_UNKNOWN)
   {
     if (identify_board () == BOARD_MODE_UNKNOWN)
       return;
-  }  
+  }
 
-  // Server mode
+  // Battery status
+  double Vbat_volt = ((double)analogRead(4) * 2.0 * 3.3) / 4096.0;
+  double Vbat_percentage = (Vbat_volt * 100.0) / 4.0;
+
+
+  // --- SERVER --------------------------------------
   if (boardMode == BOARD_MODE_SERVER)
   {
     // ------ Process inclinometer data --------
@@ -115,44 +126,39 @@ void loop (void)
     comData.inclAngularVelocity = inclinometer.get_angular_velocity_data();
     comData.incAngular          = inclinometer.get_angular_data();
 
-
     // ------ Read button state ------------------
     uint8_t buttonState = buttonMain.update();
 
     if (buttonState == BUTTON_SHORT_PUSH)
     {
-      tftMgr.switch_state();
+      if ((millis()-timerButtonDelay_ms) > 1000)
+        tftMgr.switch_state();
     }
     else if (buttonState == BUTTON_LONG_PUSH)
     {
       incAngularMemory = comData.incAngular;
+      timerButtonDelay_ms = millis();
     }
   
-
     // ------ Wifi management --------------------
     wifiAppStatus = wifiMgr.server_update();
+    wifiStrength  = wifiMgr.signal_strength();
     wifiMgr.send_data(network_prepare_data(comData), TIMER_REFRESH_WIFI_DATA_MS);
-
 
     // ------ Screen drawing ---------------------
     drawerMgr.draw_background();
     drawerMgr.draw_ping_status(wifiMgr.is_ping_received());
-    drawerMgr.draw_wifi_status(get_color_from_wifi_status(wifiAppStatus));
+    drawerMgr.draw_wifi_status(get_color_from_wifi_status(wifiAppStatus), wifiStrength);
     drawerMgr.draw_main_point(comData.incAngular.angle[0], comData.incAngular.angle[1]);
     drawerMgr.draw_inclinometer_values(comData.incAngular.angle[0], comData.incAngular.angle[1]);
     drawerMgr.draw_temperature_value(comData.incAcceleration.temperature);
-
+    drawerMgr.draw_battery_data(Vbat_percentage, Vbat_volt);
     if (incAngularMemory.version > 0)
       drawerMgr.draw_memory_values(incAngularMemory.angle[0], incAngularMemory.angle[1]);
-
-    // Delay according wifi activity
-    if (wifiAppStatus == CONNECTION_STATUS_APP_DISCONNECTED)
-      delay(100);
-    else
-      delay(50);
   }
   
-  // Client mode
+
+  // --- CLIENT --------------------------------------
   if (boardMode == BOARD_MODE_CLIENT)
   {
     // ------ Read button state ------------------
@@ -160,38 +166,38 @@ void loop (void)
 
     if (buttonState == BUTTON_SHORT_PUSH)
     {
-      tftMgr.switch_state();
+      if ((millis()-timerButtonDelay_ms) > 1000)
+        tftMgr.switch_state();
     }
     if (buttonState == BUTTON_LONG_PUSH)
     {
-      soundMgr.play_mode_change();
       if (alarmMgr.switch_state() == ALARM_STATE_ENABLING)
         tftMgr.enable_auto_shutdown();
       else
         tftMgr.disable_auto_shutdown();
+
+      soundMgr.play_mode_change();
+      timerButtonDelay_ms = millis();
     }
 
-
     // ------ Wifi management --------------------
-    wifiAppStatus  = wifiMgr.client_update();
+    wifiAppStatus = wifiMgr.client_update();
+    wifiStrength  = wifiMgr.signal_strength();
     comData = network_parse_data(wifiMgr.read_data(true));
-
-    if (wifiAppStatus != CONNECTION_STATUS_APP_CONNECTED)
-      tftMgr.enable();
-
-
-    // ------ Screen drawing ---------------------
-    tftMgr.update();
-    drawerMgr.draw_background();
-    drawerMgr.draw_ping_status(wifiMgr.is_ping_received());
-    drawerMgr.draw_wifi_status(get_color_from_wifi_status(wifiAppStatus));
-    drawerMgr.draw_main_point(comData.incAngular.angle[0], comData.incAngular.angle[1]);
-    drawerMgr.draw_inclinometer_values(comData.incAngular.angle[0], comData.incAngular.angle[1]);
-    drawerMgr.draw_temperature_value(comData.incAcceleration.temperature);
-
 
     // ------ Alarm update -----------------------
     struct strAlarmData alarmData = alarmMgr.update(comData.incAcceleration.acceleration[0], comData.incAcceleration.acceleration[1], comData.incAcceleration.acceleration[2]);
+
+    // ------ Screen drawing ---------------------
+    drawerMgr.draw_background();
+    drawerMgr.draw_ping_status(wifiMgr.is_ping_received());
+    drawerMgr.draw_wifi_status(get_color_from_wifi_status(wifiAppStatus), wifiStrength);
+    drawerMgr.draw_main_point(comData.incAngular.angle[0], comData.incAngular.angle[1]);
+    drawerMgr.draw_inclinometer_values(comData.incAngular.angle[0], comData.incAngular.angle[1]);
+    drawerMgr.draw_temperature_value(comData.incAcceleration.temperature);
+    drawerMgr.draw_battery_data(Vbat_percentage, Vbat_volt);
+    drawerMgr.draw_alarm_state(get_color_from_alarm_state(alarmData.alarmState), get_text_from_alarm_state(alarmData.alarmState));
+
     if (alarmData.alarmStatus == ALARM_STATUS_TRIGGERED)
     {
       tftMgr.disable_auto_shutdown();
@@ -203,16 +209,20 @@ void loop (void)
     }
     else
     {
+      if (wifiAppStatus != CONNECTION_STATUS_APP_CONNECTED)
+        tftMgr.enable();
+      else
+        if (alarmData.alarmState != ALARM_STATE_OFF)
+          tftMgr.enable_auto_shutdown();
+          
       soundMgr.stop_alarm();
     }    
-    drawerMgr.draw_alarm_state(get_color_from_alarm_state(alarmData.alarmState), get_text_from_alarm_state(alarmData.alarmState));
-
-    // Delay according wifi activity
-    if (wifiAppStatus == CONNECTION_STATUS_APP_DISCONNECTED)
-      delay(100);
-    else
-      delay(50);
   }
+
+  // Update
+  drawerMgr.draw_update();
+  tftMgr.update();
+  delay(10);
 }
 
 /*-------------------------------------------------------------------------------------------------------------------*/
@@ -246,10 +256,17 @@ uint8_t identify_board (void)
     Serial.print("BOARD MODE : ");
 
     if (boardMode == BOARD_MODE_SERVER)
+    {
       Serial.println("SERVER");
+      Serial.println("----------------------------------------------------------------------");
+      tftMgr.enable_auto_shutdown(10*60*1000);
+    }
     else
+    {
       Serial.println("CLIENT");
-    Serial.println("----------------------------------------------------------------------");
+      Serial.println("----------------------------------------------------------------------");
+      tftMgr.set_auto_shutdown_timeout(2*60*1000);
+    }
   }
 
   return boardMode;

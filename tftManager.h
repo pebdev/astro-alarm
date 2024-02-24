@@ -18,6 +18,10 @@
  *********************************************************************************************************************/
 
 
+/** I N C L U D E S **************************************************************************************************/
+#include <driver/ledc.h>
+
+
 /** D E F I N E S ****************************************************************************************************/
 // Gpio
 #define GPIO_OUT_LCD_BACKLIGHT        (38)
@@ -27,14 +31,16 @@
 #define TFT_STATE_OFF                 (0)
 #define TFT_STATE_ON                  (1)
 
-// Timeout
-#define TIMER_OFF_SCREEN_TIMEOUT_MS   (120000)
+// Settings
+#define TFT_BRIGHTNESS                (20)  //1-255
 
 
 /** S O U N D ********************************************************************************************************/
 class TftManager
 {
 private:
+  uint8_t lcdState;
+  unsigned long timeoutOffScreen_ms;
   unsigned long timerOffScreen_ms;
 
 
@@ -44,19 +50,44 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   TftManager (void)
   {
-    this->timerOffScreen_ms = TFT_STATE_NO_AUTO_SHUTDOWN;
+    // Turn on display power (needed when board can be powered with a battery)
+    pinMode(15, OUTPUT);
+    digitalWrite(15, HIGH);
+
+    // Reduce brightness
+    ledcSetup(1, 10000, 8);
+    ledcAttachPin(GPIO_OUT_LCD_BACKLIGHT, 1);
+    ledcWrite(1, TFT_BRIGHTNESS);
+
+    lcdState = TFT_STATE_OFF;
+    this->timeoutOffScreen_ms = 100000;
+    this->timerOffScreen_ms   = TFT_STATE_NO_AUTO_SHUTDOWN;
   }
   
   /*-------------------------------------------------------------------------------------------------------------------*/
   // @brief [PUBLIC] Enable the auto shutdown mode
+  // @param _off_screen_timeout_ms : timeout to switch off the screen.
   /*-------------------------------------------------------------------------------------------------------------------*/
-  void enable_auto_shutdown (void)
+  void set_auto_shutdown_timeout (unsigned long _off_screen_timeout_ms)
   {
+    this->timeoutOffScreen_ms = _off_screen_timeout_ms;
+    Serial.println("TFT : set auto shutdown timeout ("+String(this->timeoutOffScreen_ms)+")");
+  }
+
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  // @brief [PUBLIC] Enable the auto shutdown mode
+  // @param _off_screen_timeout_ms : timeout to switch off the screen. 0 to keep the current value.
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  void enable_auto_shutdown (unsigned long _off_screen_timeout_ms = 0)
+  {
+    if (_off_screen_timeout_ms != 0)
+      this->set_auto_shutdown_timeout(_off_screen_timeout_ms);
+
     if (this->timerOffScreen_ms == TFT_STATE_NO_AUTO_SHUTDOWN)
     {
       this->timerOffScreen_ms = millis();
       Serial.print("TFT : enable auto shutdown (");
-      Serial.print(TIMER_OFF_SCREEN_TIMEOUT_MS/1000);
+      Serial.print(this->timeoutOffScreen_ms/1000);
       Serial.println("sec)");
     }
   }
@@ -66,8 +97,11 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   void disable_auto_shutdown (void)
   {
-    this->timerOffScreen_ms = TFT_STATE_NO_AUTO_SHUTDOWN;
-    Serial.println("TFT : disabled auto shutdown");
+    if (this->timerOffScreen_ms != TFT_STATE_NO_AUTO_SHUTDOWN)
+    {
+      this->timerOffScreen_ms = TFT_STATE_NO_AUTO_SHUTDOWN;
+      Serial.println("TFT : disabled auto shutdown");
+    }
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -75,8 +109,19 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   void enable (void)
   {
-    digitalWrite(GPIO_OUT_LCD_BACKLIGHT, TFT_STATE_ON);
-    this->timerOffScreen_ms = millis();
+    if (lcdState == TFT_STATE_OFF)
+    {
+      lcdState = TFT_STATE_ON;
+      digitalWrite(GPIO_OUT_LCD_BACKLIGHT, TFT_STATE_ON);
+      ledcWrite(1, TFT_BRIGHTNESS);
+      Serial.println("TFT : enabled");
+
+      if (this->timerOffScreen_ms != TFT_STATE_NO_AUTO_SHUTDOWN)
+      {
+        this->timerOffScreen_ms = millis();
+        Serial.println("TFT : reset off screen timer");
+      }
+    }
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -84,7 +129,12 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   void disable (void)
   {
-    digitalWrite(GPIO_OUT_LCD_BACKLIGHT, TFT_STATE_OFF);
+    if (lcdState == TFT_STATE_ON)
+    {
+      lcdState = TFT_STATE_OFF;
+      digitalWrite(GPIO_OUT_LCD_BACKLIGHT, TFT_STATE_OFF);
+      Serial.println("TFT : disabled");
+    }
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -95,7 +145,9 @@ public:
     // Current TFT state : OFF
     if (digitalRead(GPIO_OUT_LCD_BACKLIGHT) == TFT_STATE_OFF)
     {
+      lcdState = TFT_STATE_ON;
       digitalWrite(GPIO_OUT_LCD_BACKLIGHT, TFT_STATE_ON);
+      ledcWrite(1, TFT_BRIGHTNESS);
       Serial.println("TFT : switch state to ON");
 
       if (this->timerOffScreen_ms != TFT_STATE_NO_AUTO_SHUTDOWN)
@@ -105,6 +157,7 @@ public:
     // Current TFT state : ON
     else
     {
+      lcdState = TFT_STATE_OFF;
       digitalWrite(GPIO_OUT_LCD_BACKLIGHT, TFT_STATE_OFF);
       Serial.println("TFT : switch state to OFF");
     }
@@ -118,8 +171,9 @@ public:
     if (this->timerOffScreen_ms != TFT_STATE_NO_AUTO_SHUTDOWN)
     {
       // Power off screen if the timeout was reached
-      if ((millis()-this->timerOffScreen_ms) > TIMER_OFF_SCREEN_TIMEOUT_MS)
+      if ((millis()-this->timerOffScreen_ms) > this->timeoutOffScreen_ms)
       {
+        lcdState = TFT_STATE_OFF;
         digitalWrite(GPIO_OUT_LCD_BACKLIGHT, TFT_STATE_OFF);
       }
     }

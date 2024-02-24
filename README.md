@@ -30,9 +30,9 @@ Cable connection :
 ![](README/image%202.png)
 
 Buzzer connection :
-| Type | Pin |
-|:----:|:---:|
-| +    | 21  |
+|   Type   | Pin |
+|:--------:|:---:|
+| Buuzer + | 21  |
 
 ---
 ## Arduino IDE
@@ -59,11 +59,12 @@ If you have an error when flashing the board, just unplug USB-C, push the bottom
 Server or Client mode is automatically selected by the software, the software is the same for both board.
 
 ### TFT Auto shutdown
-Client board has a TFT auto shutdown mechanism. This mechanism is enabled only when the alarm is enabled.  
+Server board has a TFT auto shutdown mechanism after 10 minutes.  
+Client board has a TFT auto shutdown mechanisl too, but only only when the alarm is enabled, after 2 minutes.  
 
 TFT will be automatically switch to ON in these conditions :
 - if the connection with the router or the server is lost
-- if alarm is triggered
+- if alarm is triggered (on Client board only)
 
 ### Button usage
 #### Server side

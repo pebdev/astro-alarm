@@ -30,6 +30,8 @@ private:
   uint16_t isAlarmBarDisplayed;
   unsigned long timerRrefreshPing_ms = millis();
   TFT_eSPI tft = TFT_eSPI();
+  TFT_eSprite spriteScreen = TFT_eSprite(&tft);
+  unsigned long timerAlarmDraw_ms = 0;
 
 
 public:
@@ -40,9 +42,24 @@ public:
   {
     this->isAlarmBarDisplayed = false;
     
+    // Initialize the TFT
     this->tft.init();
     this->tft.setRotation(1);
     this->tft.setSwapBytes(true);
+
+    // Use sprite to avoid screen flickering
+    this->spriteScreen.createSprite(tft.width(), tft.height());
+    this->spriteScreen.setSwapBytes(true);
+    this->spriteScreen.setTextColor(TFT_WHITE, TFT_BLACK);
+  }
+
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  // @brief [PUBLIC] Update drawing
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  void draw_update (void)
+  {
+    // Send data to the TFT
+    this->spriteScreen.pushSprite(0, 0);
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -56,7 +73,7 @@ public:
     uint16_t cy     = this->tft.height() / 2;
     
     // Clear screen
-    this->tft.fillScreen(TFT_BLACK);
+    this->spriteScreen.fillSprite(TFT_BLACK);
     
     // Draw background
     for (uint16_t i=0; i<7; i++)
@@ -66,24 +83,23 @@ public:
       else
         color = TFT_DARKCYAN;
       
-      this->tft.drawCircle(cx, cy, i*size, color);
+      this->spriteScreen.drawCircle(cx, cy, i*size, color);
       size += 3;
     }
 
     // Lines
-    this->tft.drawLine(cx, 0, cx, this->tft.height(), TFT_NAVY);
-    this->tft.drawLine(0, cy, this->tft.width(), cy, TFT_NAVY);
-    this->tft.drawLine(0, 0, this->tft.width(), this->tft.height(), TFT_NAVY);
-    this->tft.drawLine(0, this->tft.height(), this->tft.width(), 0, TFT_NAVY);
+    this->spriteScreen.drawLine(cx, 0, cx, this->tft.height(), TFT_NAVY);
+    this->spriteScreen.drawLine(0, cy, this->tft.width(), cy, TFT_NAVY);
+    this->spriteScreen.drawLine(0, 0, this->tft.width(), this->tft.height(), TFT_NAVY);
+    this->spriteScreen.drawLine(0, this->tft.height(), this->tft.width(), 0, TFT_NAVY);
 
     // axis name
-    this->tft.setTextSize(2);
-    this->tft.setTextColor(TFT_NAVY);
-    this->tft.setTextDatum(TL_DATUM);
-    this->tft.drawString("x+", cx+3, 0);
-    this->tft.drawString("x-", cx+3, this->tft.height()-18);
-    this->tft.drawString("y-", 3, cy+1);
-    this->tft.drawString("y+", this->tft.width()-25, cy+1);
+    this->spriteScreen.setTextColor(TFT_NAVY);
+    this->spriteScreen.setTextDatum(TL_DATUM);
+    this->spriteScreen.drawString("x+", cx+3, -5, 4);
+    this->spriteScreen.drawString("x-", cx+3, this->tft.height()-18, 4);
+    this->spriteScreen.drawString("y-", 3, cy+1, 4);
+    this->spriteScreen.drawString("y+", this->tft.width()-25, cy+1, 4);
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -111,8 +127,8 @@ public:
     
     if (this->isAlarmBarDisplayed == true)
     {
-      if (yp > (this->tft.height()-10-circleSize))
-        yp = this->tft.height()-10-circleSize;
+      if (yp > (this->tft.height()-20-circleSize))
+        yp = this->tft.height()-20-circleSize;
     }
     else
     {
@@ -120,7 +136,7 @@ public:
         yp = this->tft.height()-circleSize;
     }
 
-    this->tft.fillCircle(xp, yp, circleSize-2, TFT_RED);
+    this->spriteScreen.fillCircle(xp, yp, circleSize-2, TFT_RED);
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -130,20 +146,19 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   void draw_inclinometer_values (double _x, double _y)
   {
+    uint32_t color = TFT_RED;
     String Xval = "X=" + String(_x);
     String Yval = "Y=" + String(_y);
-    uint32_t color = TFT_RED;
 
     if ((abs(_x) < 0.1) && (abs(_y) < 0.1))
       color = TFT_GREEN;
     else if ((abs(_x) < 1.0) && (abs(_y) < 1.0))
       color = TFT_ORANGE;
 
-    this->tft.setTextSize(2);
-    this->tft.setTextColor(color);
-    this->tft.setTextDatum(TL_DATUM);
-    this->tft.drawString(Xval, 2, 0);
-    this->tft.drawString(Yval, 2, 20);
+    this->spriteScreen.setTextColor(color);
+    this->spriteScreen.setTextDatum(TL_DATUM);
+    this->spriteScreen.drawString(Xval, 2, 0, 4);
+    this->spriteScreen.drawString(Yval, 2, 25, 4);
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -156,11 +171,10 @@ public:
     String Xval = "Xm=" + String(_x);
     String Yval = "Ym=" + String(_y);
 
-    this->tft.setTextSize(2);
-    this->tft.setTextColor(TFT_DARKCYAN);
-    this->tft.setTextDatum(TL_DATUM);
-    this->tft.drawString(Xval, this->tft.width()-110, this->tft.height()-40);
-    this->tft.drawString(Yval, this->tft.width()-110, this->tft.height()-20);
+    this->spriteScreen.setTextColor(TFT_DARKCYAN);
+    this->spriteScreen.setTextDatum(TL_DATUM);
+    this->spriteScreen.drawString(Xval, this->tft.width()-80, this->tft.height()-35, 2);
+    this->spriteScreen.drawString(Yval, this->tft.width()-80, this->tft.height()-20, 2);
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -169,17 +183,38 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   void draw_temperature_value (double _temperature)
   {
-    uint32_t heightObject = this->tft.height()-20;
-
+    uint32_t heightObject = this->tft.height()-35;
     String Stemperature = "T=" + String(int(_temperature))+"C";
 
     if (this->isAlarmBarDisplayed == true)
-      heightObject -= 10;
+      heightObject -= 20;
 
-    this->tft.setTextSize(2);
-    this->tft.setTextColor(TFT_DARKCYAN);
-    this->tft.setTextDatum(TL_DATUM);
-    this->tft.drawString(Stemperature, 2, heightObject);
+    this->spriteScreen.setTextColor(TFT_DARKCYAN);
+    this->spriteScreen.setTextDatum(TL_DATUM);
+    this->spriteScreen.drawString(Stemperature, 2, heightObject, 2);
+  }
+
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  // @brief [PUBLIC] Draw battery data.
+  // @param _vbat_percentage : percentage of the battery voltage.
+  // @param _vbat_voltage    : voltage of the battery.
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  void draw_battery_data (double _vbat_percentage, double _vbat_voltage)
+  {
+    uint32_t heightObject = this->tft.height()-20;
+    String VbatData = "";
+
+    if (this->isAlarmBarDisplayed == true)
+      heightObject -= 20;
+
+    if (_vbat_voltage > 4.5)
+      VbatData = "VBat=charging...";
+    else
+      VbatData = "VBat=" + String(int(_vbat_percentage))+"%"; //-"+String(_vbat_voltage)+"V";
+
+    this->spriteScreen.setTextColor(TFT_DARKCYAN);
+    this->spriteScreen.setTextDatum(TL_DATUM);
+    this->spriteScreen.drawString(VbatData, 2, heightObject, 2);
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -193,27 +228,42 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   void draw_alarm_data (double _Xacc_init, double _Yacc_init, double _Zacc_init, double _Xacc_current, double _Yacc_current, double _Zacc_current)
   {
-    String AccelerationCurrent = "Acc.curr="+String(_Xacc_init)+"|"+String(_Yacc_init)+"|"+String(_Zacc_init);
-    String AccelerationInit    = "Acc.init="+String(_Xacc_current)+"|"+String(_Yacc_current)+"|"+String(_Zacc_current);
+    String AccelerationCurrent = "Acc.curr="+String(_Xacc_init)+" | "+String(_Yacc_init)+" | "+String(_Zacc_init);
+    String AccelerationInit    = "Acc.init="+String(_Xacc_current)+" | "+String(_Yacc_current)+" | "+String(_Zacc_current);
+    
+    // if alarm display is not yet enabled
+    if (timerAlarmDraw_ms == 0)
+      timerAlarmDraw_ms = millis();
 
-    this->tft.setTextSize(3);
-    this->tft.setTextColor(TFT_RED);
-    this->tft.setTextDatum(TL_DATUM);
-    this->tft.drawString("ALARM TRIGGERED", 25, 50);
+    if ((millis()-timerAlarmDraw_ms) < 500)
+    {
+      this->spriteScreen.setTextColor(TFT_RED);
+      this->spriteScreen.setTextDatum(TL_DATUM);
+      this->spriteScreen.drawString("ALARM TRIGGERED", 45, 55, 4);
+    }
 
-    this->tft.setTextSize(2);
-    this->tft.setTextColor(TFT_RED);
-    this->tft.drawString(AccelerationCurrent, 10, this->tft.height()-60);
-    this->tft.drawString(AccelerationInit, 10, this->tft.height()-40);
+    if ((millis()-timerAlarmDraw_ms) > 250)
+    {
+      timerAlarmDraw_ms = 0;
+    }
+
+    this->spriteScreen.setTextColor(TFT_RED);
+    this->spriteScreen.drawString(AccelerationCurrent, 10, this->tft.height()-60, 2);
+    this->spriteScreen.drawString(AccelerationInit, 10, this->tft.height()-40, 2);
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
   // @brief [PUBLIC] Draw wifi status
-  // @param _color : color of the indicator
+  // @param _color            : color of the indicator
+  // @param _signal_strength  : wifi signal strength
   /*-------------------------------------------------------------------------------------------------------------------*/
-  void draw_wifi_status (uint32_t _color)
+  void draw_wifi_status (uint32_t _color, int16_t _signal_strength)
   {
-    this->tft.fillRoundRect(this->tft.width()-50, 0, 50, 5, 3, _color);
+    String wifiQuality = String(_signal_strength)+"%";
+
+    this->spriteScreen.fillRoundRect(this->tft.width()-50, 0, 50, 5, 3, _color);
+    this->spriteScreen.setTextColor(_color);
+    this->spriteScreen.drawString(wifiQuality, this->tft.width()-37, 10, 2);
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -222,13 +272,16 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   void draw_ping_status (bool _status)
   {
-    unsigned long timeout_ms = 500;
+    unsigned long timeout_ms = 250;
 
     if ((_status == true) && ((millis()-this->timerRrefreshPing_ms) > timeout_ms))
-      this->timerRrefreshPing_ms = millis();
+    {
+      if ((millis()-this->timerRrefreshPing_ms) > (timeout_ms+500))
+        this->timerRrefreshPing_ms = millis();
+    }
     
     if ((millis()-this->timerRrefreshPing_ms) < timeout_ms)
-      this->tft.fillRoundRect(this->tft.width()-70, 0, 8, 5, 3, TFT_GREEN);
+      this->spriteScreen.fillRoundRect(this->tft.width()-70, 0, 8, 5, 3, TFT_GREEN);
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -239,12 +292,11 @@ public:
   void draw_alarm_state (uint32_t _color, String _state)
   {
     isAlarmBarDisplayed = true;
-    String state = "ALARM STATE : "+_state;
+    String state = "ALARM "+_state;
 
-    this->tft.fillRoundRect(0, this->tft.height()-10, this->tft.width(), this->tft.height(), 3, _color);
-    this->tft.setTextSize(1);
-    this->tft.setTextColor(TFT_NAVY);
-    this->tft.setTextDatum(TL_DATUM);
-    this->tft.drawString(state, this->tft.width()/3, this->tft.height()-8);
+    this->spriteScreen.fillRoundRect(0, this->tft.height()-20, this->tft.width(), this->tft.height(), 3, _color);
+    this->spriteScreen.setTextColor(TFT_NAVY);
+    this->spriteScreen.setTextDatum(TL_DATUM);
+    this->spriteScreen.drawString(state, 55, this->tft.height()-20, 4);
   }
 };

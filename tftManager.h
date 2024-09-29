@@ -55,8 +55,15 @@ public:
     digitalWrite(15, HIGH);
 
     // Reduce brightness
-    ledcSetup(1, 10000, 8);
-    ledcAttachPin(GPIO_OUT_LCD_BACKLIGHT, 1);
+    // API v2.XX
+    //  ledcSetup(pwmChannel, frequence, resolution);   => ledcSetup(1, 10000, 8);
+    //  ledcAttachPin(pwmPin, pwmChannel);              => ledcAttachPin(GPIO_OUT_LCD_BACKLIGHT, 1);
+    //
+    // API v3.XX
+    //  ledcAttach(uint8_t pin, uint32_t freq, uint8_t resolution);
+    ledcAttach(GPIO_OUT_LCD_BACKLIGHT, 10000, 8);
+
+
     ledcWrite(1, TFT_BRIGHTNESS);
 
     lcdState = TFT_STATE_OFF;

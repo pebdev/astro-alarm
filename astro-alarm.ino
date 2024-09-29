@@ -149,6 +149,7 @@ void loop (void)
     drawerMgr.draw_background();
     drawerMgr.draw_ping_status(wifiMgr.is_ping_received());
     drawerMgr.draw_wifi_status(get_color_from_wifi_status(wifiAppStatus), wifiStrength);
+    drawerMgr.draw_north_point(comData.incAngular.angle[2]);
     drawerMgr.draw_main_point(comData.incAngular.angle[0], comData.incAngular.angle[1]);
     drawerMgr.draw_inclinometer_values(comData.incAngular.angle[0], comData.incAngular.angle[1]);
     drawerMgr.draw_temperature_value(comData.incAcceleration.temperature);
@@ -192,6 +193,7 @@ void loop (void)
     drawerMgr.draw_background();
     drawerMgr.draw_ping_status(wifiMgr.is_ping_received());
     drawerMgr.draw_wifi_status(get_color_from_wifi_status(wifiAppStatus), wifiStrength);
+    drawerMgr.draw_north_point(comData.incAngular.angle[2]);
     drawerMgr.draw_main_point(comData.incAngular.angle[0], comData.incAngular.angle[1]);
     drawerMgr.draw_inclinometer_values(comData.incAngular.angle[0], comData.incAngular.angle[1]);
     drawerMgr.draw_temperature_value(comData.incAcceleration.temperature);
@@ -224,6 +226,12 @@ void loop (void)
   tftMgr.update();
   delay(10);
 }
+
+/*-------------------------------------------------------------------------------------------------------------------*/
+
+
+/*-------------------------------------------------------------------------------------------------------------------*/
+
 
 /*-------------------------------------------------------------------------------------------------------------------*/
 void serialEvent1 (void) 

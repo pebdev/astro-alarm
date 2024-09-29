@@ -113,7 +113,7 @@ public:
     double scale  = 10.0;
     double cx = this->tft.width() / 2;
     double cy = this->tft.height() / 2;
-    double xp = _y*scale + cx;    // volontary invert x and y to match on GUI
+    double xp = (_y*scale + cx);
     double yp = _x*scale + cy;
     
     if (xp < 0)
@@ -137,6 +137,43 @@ public:
     }
 
     this->spriteScreen.fillCircle(xp, yp, circleSize-2, TFT_RED);
+  }
+
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  // @brief [PUBLIC] convert angle from degree to radian
+  // @param _degrees : angle in degree
+  // @return angle in radian
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  double toRadians (double _degrees)
+  {
+    return _degrees * M_PI / 180.0;
+  }
+
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  // @brief [PUBLIC] Draw north point of the inclinometer
+  // @param _z : Z angle
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  void draw_north_point (double _z)
+  {
+    int32_t x0 = this->tft.width() / 2;
+    int32_t y0 = this->tft.height() / 2;
+    double circleRadius1 = 55.0;
+    double circleRadius2 = 45.0;
+
+    double zAngle = (_z + 90);
+
+    double vertex1 = toRadians(zAngle);
+    double vertex2 = toRadians(zAngle + 15);
+    double vertex3 = toRadians(zAngle - 15);
+
+    int32_t x1 = x0 + circleRadius1 * cos(vertex1);
+    int32_t y1 = y0 + circleRadius1 * sin(vertex1);
+    int32_t x2 = x0 + circleRadius2 * cos(vertex2);
+    int32_t y2 = y0 + circleRadius2 * sin(vertex2);
+    int32_t x3 = x0 + circleRadius2 * cos(vertex3);
+    int32_t y3 = y0 + circleRadius2 * sin(vertex3);
+    
+    this->spriteScreen.fillTriangle(x1, y1, x2, y2, x3, y3, TFT_DARKCYAN);
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/

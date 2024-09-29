@@ -73,6 +73,8 @@ private:
   // Final data, shared with users
   bool firstFrameDetected;
   bool newDataReady;
+  int16_t sign_x;
+  int16_t sign_z;
   struct strAcceleration incAcceleration;
   struct strAngularVelocity inclAngularVelocity;
   struct strAngular incAngular;
@@ -86,6 +88,8 @@ public:
   {
     this->newDataReady        = false;
     this->firstFrameDetected  = false;
+    this->sign_x              = -1; // If X is inverted, y will be too
+    this->sign_z              = 180;
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -153,8 +157,8 @@ public:
 
     if (this->incAccelerationRaw.checksum == this->checksum(&this->incAccelerationRaw, 0x51))
     {
-      this->incAcceleration.acceleration[0] = this->value_saturation((double)this->incAccelerationRaw.acceleration[0]/32768.0*16.0, 16.0);
-      this->incAcceleration.acceleration[1] = this->value_saturation((double)this->incAccelerationRaw.acceleration[1]/32768.0*16.0, 16.0);
+      this->incAcceleration.acceleration[0] = this->value_saturation((double)this->incAccelerationRaw.acceleration[0]/32768.0*16.0, 16.0) * this->sign_x;
+      this->incAcceleration.acceleration[1] = this->value_saturation((double)this->incAccelerationRaw.acceleration[1]/32768.0*16.0, 16.0) * this->sign_x;
       this->incAcceleration.acceleration[2] = this->value_saturation((double)this->incAccelerationRaw.acceleration[2]/32768.0*16.0, 16.0);
       this->incAcceleration.temperature     = (double)this->incAccelerationRaw.temperature/100.0;
     }
@@ -165,8 +169,8 @@ public:
 
     if (this->inclAngularVelocityRaw.checksum == this->checksum(&this->inclAngularVelocityRaw, 0x52))
     {
-      this->inclAngularVelocity.velocity[0] = this->value_saturation((double)this->inclAngularVelocityRaw.velocity[0]/32768.0*2000.0, 2000.0);
-      this->inclAngularVelocity.velocity[1] = this->value_saturation((double)this->inclAngularVelocityRaw.velocity[1]/32768.0*2000.0, 2000.0);
+      this->inclAngularVelocity.velocity[0] = this->value_saturation((double)this->inclAngularVelocityRaw.velocity[0]/32768.0*2000.0, 2000.0) * this->sign_x;
+      this->inclAngularVelocity.velocity[1] = this->value_saturation((double)this->inclAngularVelocityRaw.velocity[1]/32768.0*2000.0, 2000.0) * this->sign_x;
       this->inclAngularVelocity.velocity[2] = this->value_saturation((double)this->inclAngularVelocityRaw.velocity[2]/32768.0*2000.0, 2000.0);
     }
     else
@@ -176,9 +180,9 @@ public:
 
     if (this->incAngularRaw.checksum == this->checksum(&this->incAngularRaw, 0x53))
     {
-      this->incAngular.angle[0] = this->value_saturation((double)this->incAngularRaw.angle[0]/32768.0*180.0, 180.0);
-      this->incAngular.angle[1] = this->value_saturation((double)this->incAngularRaw.angle[1]/32768.0*180.0, 180.0);
-      this->incAngular.angle[2] = this->value_saturation((double)this->incAngularRaw.angle[2]/32768.0*180.0, 180.0);
+      this->incAngular.angle[0] = this->value_saturation((double)this->incAngularRaw.angle[0]/32768.0*180.0, 180.0) * this->sign_x;
+      this->incAngular.angle[1] = this->value_saturation((double)this->incAngularRaw.angle[1]/32768.0*180.0, 180.0) * this->sign_x;
+      this->incAngular.angle[2] = this->value_saturation((double)this->incAngularRaw.angle[2]/32768.0*180.0, 180.0) + this->sign_z;
       this->incAngular.version  = this->incAngularRaw.version;
     }
     else

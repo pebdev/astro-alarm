@@ -46,7 +46,7 @@ You need these libraries (to add with the IDE library manager):
 - Hardware Buttons
 - TFT_eSPI  
   *Note : because there is a problem with the TFT library, you must replace the **User_Setup_Select.h** file in the TFT_eSPI library folder by the file provided with the Astro Alarm repo.  
-  If the livrary is updated, you must do it again.*
+  If the library is updated, you must do it again.*
 
 ### Programmation
 If you have an error when flashing the board, just unplug USB-C, push the bottom button and plug USB-C.

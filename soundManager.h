@@ -86,4 +86,28 @@ public:
     noTone(this->pin);
     #endif
   }
+
+
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  // @brief [PUBLIC] Play a warning sound alarm
+  /*-------------------------------------------------------------------------------------------------------------------*/
+  void play_warning_alarm (void)
+  {
+    const byte countNotes = 1;
+    int frequences[countNotes] = {
+      800
+    };
+    int durations[countNotes] = {
+      500
+    };
+
+    for (int i=0; i<countNotes; i++)
+    {
+      #ifdef CONFIG_SOUND_ENABLED
+      tone(this->pin, frequences[i], durations[i] * 2);
+      #endif
+      delay(durations[i] * 3);
+      noTone(this->pin);
+    }
+  }
 };

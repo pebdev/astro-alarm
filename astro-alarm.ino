@@ -187,7 +187,10 @@ void loop (void)
     comData = network_parse_data(wifiMgr.read_data(true));
 
     // ------ Alarm update -----------------------
-    struct strAlarmData alarmData = alarmMgr.update(comData.incAcceleration.acceleration[0], comData.incAcceleration.acceleration[1], comData.incAcceleration.acceleration[2]);
+    bool connection_lost = false;
+    if (wifiAppStatus != CONNECTION_STATUS_APP_CONNECTED)
+      connection_lost = true;
+    struct strAlarmData alarmData = alarmMgr.update(connection_lost, comData.incAcceleration.acceleration[0], comData.incAcceleration.acceleration[1], comData.incAcceleration.acceleration[2]);
 
     // ------ Screen drawing ---------------------
     drawerMgr.draw_background();
@@ -200,6 +203,7 @@ void loop (void)
     drawerMgr.draw_battery_data(Vbat_percentage, Vbat_volt);
     drawerMgr.draw_alarm_state(get_color_from_alarm_state(alarmData.alarmState), get_text_from_alarm_state(alarmData.alarmState));
 
+    // ALARM TRIGGERED
     if (alarmData.alarmStatus == ALARM_STATUS_TRIGGERED)
     {
       tftMgr.disable_auto_shutdown();
@@ -209,6 +213,17 @@ void loop (void)
                                 alarmData.XaccCurrent, alarmData.YaccCurrent, alarmData.ZaccCurrent);
       soundMgr.play_alarm();
     }
+
+    // ALARM WARNING (connection lost)
+    else if (alarmData.alarmStatus == ALARM_STATUS_WARNING)
+    {
+      tftMgr.disable_auto_shutdown();
+      tftMgr.enable();
+
+      soundMgr.play_warning_alarm();
+    }
+
+    // NO ALARM
     else
     {
       if (wifiAppStatus != CONNECTION_STATUS_APP_CONNECTED)

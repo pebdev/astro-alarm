@@ -28,6 +28,10 @@
 // Alarm status
 #define ALARM_STATUS_NOT_TRIGGERED      (0)
 #define ALARM_STATUS_TRIGGERED          (1)
+#define ALARM_STATUS_WARNING            (2)
+
+// TImeout
+#define REFRESH_WARNING_TIMEOUT_MS      (10000)
 
 
 /** S T R U C T S ****************************************************************************************************/
@@ -52,6 +56,7 @@ struct strAlarmData
 class AlarmManager
 {
 private:
+  uint32_t refresh_timestamp_ms;
   struct strAlarmData alarmData;
   
   
@@ -61,6 +66,7 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   AlarmManager (void)
   {
+    this->refresh_timestamp_ms    = 0;
     this->alarmData.alarmStatus   = ALARM_STATUS_NOT_TRIGGERED;
     this->alarmData.alarmState    = ALARM_STATE_OFF;
     this->alarmData.XaccInit      = 0.0;
@@ -94,14 +100,15 @@ public:
   
   /*-------------------------------------------------------------------------------------------------------------------*/
   // @brief [PUBLIC] Update the alarm state
+  // @param _signal_lost : true if the root signal was lost, otherwise false
   // @param _Xacc : acceleration on X
   // @param _Yacc : acceleration on Y
   // @param _Zacc : acceleration on Z
   // @return strAlarmData data
   /*-------------------------------------------------------------------------------------------------------------------*/
-  struct strAlarmData update (double _Xacc, double _Yacc, double _Zacc)
+  struct strAlarmData update (bool _signal_lost, double _Xacc, double _Yacc, double _Zacc)
   {
-    double margin = 0.05;
+    double margin = 0.06;
 
     // When we enable alarm, we record current inclinometer data to display these when alarm is triggered
     if (this->alarmData.alarmState == ALARM_STATE_ENABLING)
@@ -119,19 +126,39 @@ public:
     // If alarm is enabled
     if (this->alarmData.alarmState == ALARM_STATE_ON)
     {
-      // Check trigger
-      if ((this->alarmData.alarmState == ALARM_STATE_LOCKED) 
-         || ((!this->is_in_range(this->alarmData.XaccInit, this->alarmData.XaccCurrent, margin) 
-         ||   !this->is_in_range(this->alarmData.YaccInit, this->alarmData.YaccCurrent, margin) 
-         ||   !this->is_in_range(this->alarmData.ZaccInit, this->alarmData.ZaccCurrent, margin))))
+      // Signal is present, check data
+      if (_signal_lost == false)
       {
-        this->alarmData.alarmState  = ALARM_STATE_LOCKED;
-        this->alarmData.alarmStatus = ALARM_STATUS_TRIGGERED;
-        Serial.println("ALARM : TRIGGERED");
+        // Check trigger
+        if ((this->alarmData.alarmState == ALARM_STATE_LOCKED) 
+          || ((!this->is_in_range(this->alarmData.XaccInit, this->alarmData.XaccCurrent, margin) 
+          ||   !this->is_in_range(this->alarmData.YaccInit, this->alarmData.YaccCurrent, margin) 
+          ||   !this->is_in_range(this->alarmData.ZaccInit, this->alarmData.ZaccCurrent, margin))))
+        {
+          this->alarmData.alarmState  = ALARM_STATE_LOCKED;
+          this->alarmData.alarmStatus = ALARM_STATUS_TRIGGERED;
+          Serial.println("ALARM : TRIGGERED");
+        }
+        else
+        {
+          this->alarmData.alarmStatus = ALARM_STATUS_NOT_TRIGGERED;
+        }
+
+        this->refresh_timestamp_ms = millis();
       }
+      // Signal was lost, notify user
       else
       {
-        this->alarmData.alarmStatus = ALARM_STATUS_NOT_TRIGGERED;
+        if ((millis()-this->refresh_timestamp_ms) > REFRESH_WARNING_TIMEOUT_MS)
+        {
+          this->refresh_timestamp_ms = millis();
+          this->alarmData.alarmStatus = ALARM_STATUS_WARNING;
+          Serial.println("ALARM : WARNING");
+        }
+        else
+        {
+          this->alarmData.alarmStatus = ALARM_STATUS_NOT_TRIGGERED;
+        }
       }
     }
     

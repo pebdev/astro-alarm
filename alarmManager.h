@@ -30,8 +30,9 @@
 #define ALARM_STATUS_TRIGGERED          (1)
 #define ALARM_STATUS_WARNING            (2)
 
-// TImeout
+// Timeout
 #define REFRESH_WARNING_TIMEOUT_MS      (10000)
+#define CONFIRMATION_LOST_TIMEOUT_MS    (30000)
 
 
 /** S T R U C T S ****************************************************************************************************/
@@ -57,6 +58,7 @@ class AlarmManager
 {
 private:
   uint32_t refresh_timestamp_ms;
+  uint32_t confirmation_lost_timestamp_ms;
   struct strAlarmData alarmData;
   
   
@@ -66,15 +68,16 @@ public:
   /*-------------------------------------------------------------------------------------------------------------------*/
   AlarmManager (void)
   {
-    this->refresh_timestamp_ms    = 0;
-    this->alarmData.alarmStatus   = ALARM_STATUS_NOT_TRIGGERED;
-    this->alarmData.alarmState    = ALARM_STATE_OFF;
-    this->alarmData.XaccInit      = 0.0;
-    this->alarmData.YaccInit      = 0.0;
-    this->alarmData.ZaccInit      = 0.0;
-    this->alarmData.XaccCurrent   = 0.0;
-    this->alarmData.YaccCurrent   = 0.0;
-    this->alarmData.ZaccCurrent   = 0.0;
+    this->refresh_timestamp_ms            = 0;
+    this->confirmation_lost_timestamp_ms  = 0;
+    this->alarmData.alarmStatus           = ALARM_STATUS_NOT_TRIGGERED;
+    this->alarmData.alarmState            = ALARM_STATE_OFF;
+    this->alarmData.XaccInit              = 0.0;
+    this->alarmData.YaccInit              = 0.0;
+    this->alarmData.ZaccInit              = 0.0;
+    this->alarmData.XaccCurrent           = 0.0;
+    this->alarmData.YaccCurrent           = 0.0;
+    this->alarmData.ZaccCurrent           = 0.0;
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -109,6 +112,7 @@ public:
   struct strAlarmData update (bool _signal_lost, double _Xacc, double _Yacc, double _Zacc)
   {
     double margin = 0.06;
+    this->alarmData.alarmStatus = ALARM_STATUS_NOT_TRIGGERED;
 
     // When we enable alarm, we record current inclinometer data to display these when alarm is triggered
     if (this->alarmData.alarmState == ALARM_STATE_ENABLING)
@@ -139,25 +143,27 @@ public:
           this->alarmData.alarmStatus = ALARM_STATUS_TRIGGERED;
           Serial.println("ALARM : TRIGGERED");
         }
-        else
-        {
-          this->alarmData.alarmStatus = ALARM_STATUS_NOT_TRIGGERED;
-        }
 
+        this->confirmation_lost_timestamp_ms = 0;
         this->refresh_timestamp_ms = millis();
       }
       // Signal was lost, notify user
       else
       {
-        if ((millis()-this->refresh_timestamp_ms) > REFRESH_WARNING_TIMEOUT_MS)
+        // Need confirmation of the lost signal, start a timer
+        if (this->confirmation_lost_timestamp_ms == 0)
         {
-          this->refresh_timestamp_ms = millis();
-          this->alarmData.alarmStatus = ALARM_STATUS_WARNING;
-          Serial.println("ALARM : WARNING");
+          this->confirmation_lost_timestamp_ms = millis();
         }
-        else
+        // If timer is already started, check if the status is confirmed
+        else if ((millis()-this->confirmation_lost_timestamp_ms) > CONFIRMATION_LOST_TIMEOUT_MS)
         {
-          this->alarmData.alarmStatus = ALARM_STATUS_NOT_TRIGGERED;
+          if ((millis()-this->refresh_timestamp_ms) > REFRESH_WARNING_TIMEOUT_MS)
+          {
+            this->refresh_timestamp_ms = millis();
+            this->alarmData.alarmStatus = ALARM_STATUS_WARNING;
+            Serial.println("ALARM : WARNING");
+          }
         }
       }
     }

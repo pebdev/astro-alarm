@@ -47,7 +47,7 @@ private:
   struct strAccelerationRaw
   {
     uint16_t acceleration[3];
-    uint16_t temperature;
+    int16_t temperature;
     uint8_t checksum;
   };
 
@@ -75,6 +75,7 @@ private:
   bool newDataReady;
   int16_t sign_x;
   int16_t sign_z;
+  int16_t offset_z_angle;
   struct strAcceleration incAcceleration;
   struct strAngularVelocity inclAngularVelocity;
   struct strAngular incAngular;
@@ -90,6 +91,7 @@ public:
     this->firstFrameDetected  = false;
     this->sign_x              = -1; // If X is inverted, y will be too
     this->sign_z              = 180;
+    this->offset_z_angle      = 15.0;
   }
 
   /*-------------------------------------------------------------------------------------------------------------------*/
@@ -182,7 +184,7 @@ public:
     {
       this->incAngular.angle[0] = this->value_saturation((double)this->incAngularRaw.angle[0]/32768.0*180.0, 180.0) * this->sign_x;
       this->incAngular.angle[1] = this->value_saturation((double)this->incAngularRaw.angle[1]/32768.0*180.0, 180.0) * this->sign_x;
-      this->incAngular.angle[2] = this->value_saturation((double)this->incAngularRaw.angle[2]/32768.0*180.0, 180.0) + this->sign_z;
+      this->incAngular.angle[2] = this->value_saturation((double)this->incAngularRaw.angle[2]/32768.0*180.0, 180.0) + this->sign_z + this->offset_z_angle;
       this->incAngular.version  = this->incAngularRaw.version;
     }
     else

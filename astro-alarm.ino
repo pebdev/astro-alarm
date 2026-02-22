@@ -112,7 +112,7 @@ void loop (void)
   }
 
   // Battery status
-  double Vbat_volt = ((double)analogRead(4) * 2.0 * 3.3) / 4096.0;
+  double Vbat_volt = ((double)analogRead(4) * 2.0 * 3.0) / 4096.0;
   double Vbat_percentage = (Vbat_volt * 100.0) / 4.0;
 
 
@@ -226,11 +226,11 @@ void loop (void)
     // NO ALARM
     else
     {
-      if (wifiAppStatus != CONNECTION_STATUS_APP_CONNECTED)
-        tftMgr.enable();
-      else
-        if (alarmData.alarmState != ALARM_STATE_OFF)
-          tftMgr.enable_auto_shutdown();
+      //if (wifiAppStatus != CONNECTION_STATUS_APP_CONNECTED)
+      //  tftMgr.enable();
+      //else
+      if (alarmData.alarmState != ALARM_STATE_OFF)
+        tftMgr.enable_auto_shutdown();
           
       soundMgr.stop_alarm();
     }    
